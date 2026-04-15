@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
 import { auth, currentUser } from "@clerk/nextjs/server";
 const transactions = [
   { id: "TX-2401", type: "Plastik Campur", weight: 7, reward: 29400, date: "15 April 2026" },
@@ -15,19 +13,12 @@ export default async function DashboardPage() {
   const email = user?.primaryEmailAddress?.emailAddress || "-";
 
   return (
-    <main className="min-h-screen bg-stone-100 px-4 py-8 sm:px-6">
-      <div className="mx-auto w-full max-w-6xl space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
         <header className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-stone-200 bg-white px-5 py-4 shadow-sm sm:px-7 sm:py-5">
           <div>
             <p className="text-sm text-stone-500">Dashboard pengguna</p>
             <h1 className="text-2xl font-semibold text-stone-900">Selamat datang, {fullName}</h1>
             <p className="mt-1 text-sm text-stone-600">{email}</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/" className="rounded-full border border-stone-300 px-4 py-2 text-sm font-medium hover:bg-stone-100">
-              Beranda
-            </Link>
-            <UserButton />
           </div>
         </header>
 
@@ -66,6 +57,5 @@ export default async function DashboardPage() {
           </div>
         </section>
       </div>
-    </main>
   );
 }
