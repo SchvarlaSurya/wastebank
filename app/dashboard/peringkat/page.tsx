@@ -17,9 +17,14 @@ export default function LeaderboardPage() {
   const { user, isLoaded } = useUser();
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [timeToMonthEnd, setTimeToMonthEnd] = useState<string>("");
 
-  // Calculaet my XP based on total weight deposited (1 kg = 50 XP)
-  const myTotalWeight = transactions.reduce((acc, tx) => acc + tx.weight, 0);
+  // Calculaet my XP based on total weight deposited (1 kg = 50 XP) this month
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const myTotalWeight = transactions
+    .filter(tx => new Date(tx.date) >= startOfMonth)
+    .reduce((acc, tx) => acc + tx.weight, 0);
   const myXP = myTotalWeight * 50;
 
   useEffect(() => {
@@ -35,6 +40,26 @@ export default function LeaderboardPage() {
       }
     }
     loadUsers();
+  }, []);
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      // End of this month
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const diff = Math.max(0, endOfMonth.getTime() - now.getTime());
+      
+      const dDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const dHours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const dMins = Math.floor((diff / 1000 / 60) % 60);
+      const dSecs = Math.floor((diff / 1000) % 60);
+      
+      setTimeToMonthEnd(`${dDays} Hari ${dHours.toString().padStart(2, '0')}:${dMins.toString().padStart(2, '0')}:${dSecs.toString().padStart(2, '0')}`);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const leaderboardParams = useMemo(() => {
@@ -93,9 +118,20 @@ export default function LeaderboardPage() {
       <div className="grid gap-6 md:grid-cols-3 items-start">
         <div className="md:col-span-2 space-y-4">
           <div className="rounded-3xl border border-stone-200 bg-white shadow-sm overflow-hidden min-h-[400px]">
-            <div className="bg-stone-50 border-b border-stone-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="font-semibold text-stone-800">Papan Peringkat Bulan Ini</h2>
-              <span className="text-xs font-medium text-stone-500 uppercase tracking-widest">Top 10</span>
+            <div className="bg-stone-50 border-b border-stone-200 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <h2 className="font-semibold text-stone-800">Papan Peringkat Bulan Ini</h2>
+                <div className="flex w-fit items-center gap-2 bg-white rounded-md px-2 py-1 border border-stone-200 shadow-sm">
+                   <span className="relative flex h-2 w-2">
+                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                   </span>
+                   <span className="text-[10px] font-semibold text-stone-600">
+                     Reset Bulanan: <span className="text-emerald-700 font-mono tracking-tight ml-1">{timeToMonthEnd}</span>
+                   </span>
+                </div>
+              </div>
+              <span className="hidden sm:block text-xs font-medium text-stone-500 uppercase tracking-widest">Top 10</span>
             </div>
             
             <div className="divide-y divide-stone-100">

@@ -127,19 +127,20 @@ export async function submitWithdrawal(method: string, accountName: string, acco
 
 export async function getGlobalWasteStats() {
   try {
-    // 1. Distribusi Jenis Sampah (All users)
+    // 1. Distribusi Jenis Sampah (All users) - MONTHLY
     const distributionRaw = await sql`
       SELECT type as name, SUM(weight) as value 
       FROM transactions 
+      WHERE date >= date_trunc('month', NOW())
       GROUP BY type 
       ORDER BY value DESC
     `;
 
-    // 2. Tren Seminggu Terakhir (All users)
+    // 2. Tren Seminggu (All users) - CURRENT WEEK (Monday-Sunday)
     const weeklyRaw = await sql`
       SELECT DATE(date) as dt, SUM(weight) as total 
       FROM transactions 
-      WHERE date >= NOW() - INTERVAL '6 days' 
+      WHERE date >= date_trunc('week', NOW())
       GROUP BY DATE(date)
       ORDER BY dt ASC
     `;
@@ -150,11 +151,15 @@ export async function getGlobalWasteStats() {
       value: Number(row.value)
     }));
 
-    // Map weekly mapping to ensure consistent formatting for Bar Chart
+    // Map weekly mapping to ensure consistent formatting for Bar Chart (Mon - Sun)
     const weeklyMap: Record<string, number> = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+    const now = new Date();
+    const day = now.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday);
+    
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
       const yStr = d.getFullYear();
       const mStr = String(d.getMonth() + 1).padStart(2, "0");
       const dStr = String(d.getDate()).padStart(2, "0");

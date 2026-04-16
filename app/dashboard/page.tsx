@@ -26,6 +26,10 @@ export default function DashboardPage() {
   // Global Chart States
   const [globalDist, setGlobalDist] = useState<{name: string, value: number}[]>([]);
   const [globalWeekly, setGlobalWeekly] = useState<{date: string, weight: number}[]>([]);
+  
+  // Timer States
+  const [timeToWeekEnd, setTimeToWeekEnd] = useState<string>("");
+  const [timeToMonthEnd, setTimeToMonthEnd] = useState<string>("");
 
   useEffect(() => {
     if (!isHydrated) {
@@ -53,6 +57,39 @@ export default function DashboardPage() {
       });
     }
   }, [isHydrated, initStore]);
+
+  // Timer Effect
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      
+      // End of this week (Sunday 23:59:59)
+      const day = now.getDay();
+      const diffToSunday = day === 0 ? 0 : 7 - day;
+      const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToSunday, 23, 59, 59, 999);
+      const weekDiff = Math.max(0, endOfWeek.getTime() - now.getTime());
+      
+      const wDays = Math.floor(weekDiff / (1000 * 60 * 60 * 24));
+      const wHours = Math.floor((weekDiff / (1000 * 60 * 60)) % 24);
+      const wMins = Math.floor((weekDiff / 1000 / 60) % 60);
+      const wSecs = Math.floor((weekDiff / 1000) % 60);
+      setTimeToWeekEnd(`${wDays} Hari ${wHours.toString().padStart(2, '0')}:${wMins.toString().padStart(2, '0')}:${wSecs.toString().padStart(2, '0')}`);
+
+      // End of this month (for Donut Chart)
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      const monthDiff = Math.max(0, endOfMonth.getTime() - now.getTime());
+      
+      const mDays = Math.floor(monthDiff / (1000 * 60 * 60 * 24));
+      const mHours = Math.floor((monthDiff / (1000 * 60 * 60)) % 24);
+      const mMins = Math.floor((monthDiff / 1000 / 60) % 60);
+      const mSecs = Math.floor((monthDiff / 1000) % 60);
+      setTimeToMonthEnd(`${mDays} Hari ${mHours.toString().padStart(2, '0')}:${mMins.toString().padStart(2, '0')}:${mSecs.toString().padStart(2, '0')}`);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Metrics Calculation
   const totalSampah = useMemo(() => transactions.reduce((acc, tx) => acc + tx.weight, 0), [transactions]);
@@ -128,7 +165,18 @@ export default function DashboardPage() {
       <section className="grid gap-6 lg:grid-cols-2">
         {/* Weekly Trend Bar Chart */}
         <div className="rounded-3xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
-          <h2 className="mb-6 text-lg font-semibold text-stone-900">Tren Setoran Global Mingguan (kg)</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-2">
+            <h2 className="text-lg font-semibold text-stone-900">Tren Setoran Global Mingguan (kg)</h2>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <div className="text-xs font-semibold text-stone-600 bg-stone-100 px-2 py-1 rounded-md border border-stone-200">
+                Mingguan Reset: <span className="text-emerald-700 font-mono tracking-tight ml-1">{timeToWeekEnd}</span>
+              </div>
+            </div>
+          </div>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={globalWeekly} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
@@ -147,7 +195,18 @@ export default function DashboardPage() {
 
         {/* Distribution Pie Chart */}
         <div className="rounded-3xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6 flex flex-col">
-          <h2 className="mb-4 text-lg font-semibold text-stone-900">Distribusi Global Volume Sampah</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+            <h2 className="text-lg font-semibold text-stone-900">Distribusi Global Bulanan (Volume)</h2>
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+              </span>
+              <div className="text-xs font-semibold text-stone-600 bg-stone-100 px-2 py-1 rounded-md border border-stone-200">
+                Bulanan Reset: <span className="text-amber-700 font-mono tracking-tight ml-1">{timeToMonthEnd}</span>
+              </div>
+            </div>
+          </div>
           <div className="flex-1 flex flex-col md:flex-row w-full min-h-[280px] md:items-center gap-6">
             {globalDist.length > 0 ? (
               <>

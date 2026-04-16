@@ -1,6 +1,7 @@
 "use server";
 
 import { clerkClient } from "@clerk/nextjs/server";
+import { sql } from "@/lib/db";
 
 export async function getRegisteredUsers() {
   try {
@@ -11,23 +12,26 @@ export async function getRegisteredUsers() {
       limit: 50,
     });
 
+    // Fetch user profiles from database to get real XP for this month
+    const profiles = await sql`
+      SELECT user_id, SUM(weight * 50) as total_xp 
+      FROM transactions 
+      WHERE date >= date_trunc('month', NOW())
+      GROUP BY user_id
+    `;
+    const profileMap = new Map(profiles.map(p => [p.user_id, Number(p.total_xp)]));
+
     return users.data.map((user) => {
-      // Create a deterministic pseudo-random XP based on user ID logic
-      const idStr = user.id;
-      let hash = 0;
-      for (let i = 0; i < idStr.length; i++) {
-        hash = idStr.charCodeAt(i) + ((hash << 5) - hash);
-      }
-      // Give them a random XP between 500 and 3500 so they are competitive
-      const randomBase = 500 + (Math.abs(hash) % 3000);
-      
       const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.username || 'Eco Warrior';
+      
+      // Get real XP from database, default to 0 if no record
+      const xp = profileMap.get(user.id) || 0;
 
       return {
         id: user.id,
         name: name,
         avatar: user.imageUrl, // Clerk provides direct imageUrl
-        xp: randomBase,
+        xp: xp,
       };
     });
   } catch (error) {
