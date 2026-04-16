@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { DM_Serif_Display, Plus_Jakarta_Sans } from "next/font/google";
+import { Montserrat, Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -9,9 +9,8 @@ const sans = Plus_Jakarta_Sans({
   variable: "--font-sans",
 });
 
-const display = DM_Serif_Display({
+const display = Montserrat({
   subsets: ["latin"],
-  weight: "400",
   variable: "--font-display",
 });
 

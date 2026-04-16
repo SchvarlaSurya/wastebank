@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserButton } from "@clerk/nextjs";
 
 const navigation = [
@@ -61,30 +61,72 @@ const navigation = [
       </svg>
     )
   },
+  { 
+    name: "Pencapaian", 
+    href: "/dashboard/pencapaian", 
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+      </svg>
+    )
+  },
+  { 
+    name: "Claim Reward", 
+    href: "/dashboard/rewards", 
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h18c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125h-18c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+      </svg>
+    )
+  },
 ];
 
-export default function DashboardNavigation() {
+export default function DashboardNavigation({ claimableCount = 0 }: { claimableCount?: number }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [seenCount, setSeenCount] = useState<string | null>(null);
+
+  // Supaya tak ada Hydration Mismatch, panggil localStorage di useEffect
+  useEffect(() => {
+    setSeenCount(localStorage.getItem("seen_reward_count"));
+  }, []);
+
+  // Saat user buka halaman rewards, tandai sebagai 'dilihat'
+  useEffect(() => {
+    if (pathname === "/dashboard/rewards" && claimableCount > 0) {
+      localStorage.setItem("seen_reward_count", String(claimableCount));
+      setSeenCount(String(claimableCount));
+    }
+  }, [pathname, claimableCount]);
 
   const renderNavLinks = () => {
     return navigation.map((item) => {
       const isActive = pathname === item.href;
+      const isRewardLink = item.name === "Claim Reward";
+      const showIndicator = isRewardLink && claimableCount > 0 && String(claimableCount) !== seenCount;
+
       return (
         <Link
           key={item.name}
           href={item.href}
           onClick={() => setMobileMenuOpen(false)}
-          className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+          className={`relative group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-300 hover:-translate-y-1 active:scale-95 border border-transparent ${
             isActive
-              ? "bg-emerald-50 text-emerald-900 shadow-sm"
-              : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 hover:shadow-sm"
+              ? "bg-white/80 backdrop-blur-md text-emerald-900 shadow-[0_8px_16px_rgba(16,185,129,0.08)] border-white"
+              : "text-stone-600 hover:bg-white/60 hover:text-stone-900 hover:shadow-sm hover:border-white/50"
           }`}
         >
           <div className={`transition-all duration-300 transform group-hover:scale-110 ${isActive ? "text-emerald-700" : "text-stone-400 group-hover:text-emerald-600"}`}>
             {item.icon}
           </div>
           {item.name}
+          
+          {/* Tanda (Badge/Red Dot) */}
+          {showIndicator && (
+            <span className="absolute right-3 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white shadow-sm ring-2 ring-white">
+              {claimableCount > 9 ? "9+" : claimableCount}
+            </span>
+          )}
         </Link>
       );
     });
@@ -101,8 +143,8 @@ export default function DashboardNavigation() {
       )}
 
       {/* Mobile Drawer Menu */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-white shadow-2xl transition-transform duration-300 ease-in-out md:hidden ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex h-16 items-center justify-between border-b border-stone-200 px-6">
+      <div className={`fixed inset-y-0 left-0 z-50 w-72 transform bg-white/80 backdrop-blur-2xl shadow-[20px_0_40px_rgba(0,0,0,0.05)] transition-transform duration-300 ease-in-out md:hidden ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex h-16 items-center justify-between border-b border-white/50 px-6">
           <div className="flex items-center">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-700 text-xs font-bold text-white">WB</span>
             <span className="ml-2 font-semibold tracking-wide text-stone-900">WasteBank</span>
@@ -119,8 +161,8 @@ export default function DashboardNavigation() {
       </div>
 
       {/* Sidebar - Desktop */}
-      <aside className="hidden w-64 flex-col border-r border-stone-200 bg-white md:flex">
-        <div className="flex h-16 items-center border-b border-stone-200 px-6">
+      <aside className="hidden w-64 flex-col border-r border-white/50 bg-white/40 backdrop-blur-xl shadow-[4px_0_24px_rgba(0,0,0,0.02)] md:flex z-30">
+        <div className="flex h-16 items-center border-b border-white/50 px-6">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-700 text-xs font-bold text-white">WB</span>
           <span className="ml-2 font-semibold tracking-wide text-stone-900">WasteBank</span>
         </div>
@@ -131,11 +173,11 @@ export default function DashboardNavigation() {
 
       {/* Top Header for Mobile */}
       <div className="md:hidden">
-        <header className="fixed top-0 left-0 right-0 z-30 flex h-16 items-center justify-between border-b border-stone-200 bg-white/90 px-4 backdrop-blur-md sm:px-6">
+        <header className="fixed top-0 left-0 right-0 z-30 flex h-16 items-center justify-between border-b border-white/50 bg-white/60 px-4 backdrop-blur-xl shadow-[0_2px_10px_rgba(0,0,0,0.02)] sm:px-6">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setMobileMenuOpen(true)}
-              className="rounded-full p-2 text-stone-600 hover:bg-stone-100 focus:outline-none"
+              className="rounded-full p-2 text-stone-600 hover:bg-white/60 active:scale-90 transition-all focus:outline-none"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" />
