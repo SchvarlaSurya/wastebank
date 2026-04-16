@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { useWasteStore } from "@/store/useWasteStore";
+import { toast } from "sonner";
+import { useUser } from "@clerk/nextjs";
+import { sendBalanceNotificationEmail } from "@/app/actions/notification";
 import Link from "next/link";
 
 export default function TarikSaldoPage() {
+  const { user } = useUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [form, setForm] = useState({
@@ -56,6 +60,30 @@ export default function TarikSaldoPage() {
       if (success) {
         setIsSubmitting(false);
         setIsSuccess(true);
+
+        const newTotalBalance = availableBalance - withdrawValue;
+        
+        // Trigger modern UI Toast
+        toast.info(
+          <div className="flex flex-col gap-1">
+            <span className="font-bold text-stone-900">Penarikan Diajukan!</span>
+            <span className="text-stone-700 font-medium">- Rp ${withdrawValue.toLocaleString("id-ID")}</span>
+            <span className="text-xs text-stone-500 mt-1">Sedang menunggu verifikasi admin.</span>
+          </div>, 
+          { duration: 5000 }
+        );
+
+        // Trigger background Email via Server Action
+        if (user?.primaryEmailAddress?.emailAddress) {
+          sendBalanceNotificationEmail({
+            email: user.primaryEmailAddress.emailAddress,
+            name: user.fullName || user.username || "Eco Warrior",
+            amount: withdrawValue,
+            type: "withdrawal",
+            balance: newTotalBalance
+          });
+        }
+
         setForm({ method: "bank_transfer", accountNumber: "", accountName: "", amount: "" });
 
         // remove success banner after 5s

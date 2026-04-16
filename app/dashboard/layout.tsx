@@ -1,5 +1,6 @@
 import DashboardNavigation from './DashboardNavigation';
 import { UserButton } from '@clerk/nextjs';
+import NotificationBell from './NotificationBell';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -12,6 +13,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <header className="hidden h-16 items-center justify-end border-b border-stone-200 bg-white px-8 md:flex">
           <div className="flex items-center gap-4">
             <div className="text-sm text-stone-500 mr-2">Status: <span className="font-medium text-emerald-700">Aktif</span></div>
+            <NotificationBell />
+            <div className="h-6 w-px bg-stone-200"></div>
             <UserButton />
           </div>
         </header>

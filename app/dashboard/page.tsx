@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useWasteStore } from "@/store/useWasteStore";
+import { useWasteStore, useUserTier } from "@/store/useWasteStore";
 import {
   BarChart,
   Bar,
@@ -19,7 +19,7 @@ import {
 const COLORS = ["#047857", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#065f46"];
 
 export default function DashboardPage() {
-  const { balance, transactions } = useWasteStore();
+  const { balance, transactions, withdrawals } = useWasteStore();
 
   // Metrics Calculation
   const totalSampah = useMemo(() => transactions.reduce((acc, tx) => acc + tx.weight, 0), [transactions]);
@@ -77,12 +77,38 @@ export default function DashboardPage() {
 
   // Recent 5 Transactions
   const recentTransactions = transactions.slice(0, 5);
+  const { tier, bonusPercentage, nextTierWeight, progressToNext, tierColor } = useUserTier();
 
   return (
     <div className="mx-auto w-full space-y-6 pb-12">
-      <div className="mb-2">
-        <h1 className="text-2xl font-semibold text-stone-900">Ringkasan Dasbor</h1>
-        <p className="text-sm text-stone-600">Pantau pergerakan statistik daur ulang secara *real-time*.</p>
+      <div className="mb-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-stone-900">Ringkasan Dasbor</h1>
+          <p className="text-sm text-stone-600 mt-1">Pantau pergerakan statistik daur ulang secara *real-time*.</p>
+        </div>
+        
+        {/* Tier Badge */}
+        <div className="flex flex-col items-start sm:items-end bg-white border border-stone-200 p-3 rounded-2xl shadow-sm">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Status Member</span>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ring-1 ring-inset uppercase tracking-wide ${tierColor}`}>
+              {tier}
+            </span>
+          </div>
+          {nextTierWeight > 0 ? (
+            <div className="w-48">
+              <div className="flex justify-between text-[10px] text-stone-500 mb-1 font-medium">
+                <span>Dipercepat +{bonusPercentage}% Harga</span>
+                <span>{nextTierWeight}kg untuk Next Tier</span>
+              </div>
+              <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
+                <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progressToNext}%` }}></div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs font-medium text-emerald-600">Level Tertinggi +10% Harga</div>
+          )}
+        </div>
       </div>
 
       {/* 4 Top Metric Cards */}

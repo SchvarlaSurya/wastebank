@@ -2,8 +2,14 @@
 
 import { useState, useMemo } from "react";
 import { useWasteStore } from "@/store/useWasteStore";
+import { QRCodeCanvas } from "qrcode.react";
+import { useUser } from "@clerk/nextjs";
+import { toast } from "sonner";
+import { sendBalanceNotificationEmail } from "@/app/actions/notification";
 
-const wasteCatalog = [
+import { useUserTier } from "@/store/useWasteStore";
+
+const baseWasteCatalog = [
   { id: "plastic", name: "Plastik Campur", category: "anorganik", pricePerKg: 4200 },
   { id: "paper", name: "Kertas dan Kardus", category: "anorganik", pricePerKg: 2800 },
   { id: "metal", name: "Logam Ringan", category: "anorganik", pricePerKg: 7600 },
@@ -13,6 +19,17 @@ const wasteCatalog = [
 ];
 
 export default function SetorSampahPage() {
+  const { user } = useUser();
+  const { bonusPercentage, tier } = useUserTier();
+
+  const wasteCatalog = useMemo(() => {
+    return baseWasteCatalog.map(item => ({
+      ...item,
+      pricePerKg: item.pricePerKg + (item.pricePerKg * (bonusPercentage / 100))
+    }));
+  }, [bonusPercentage]);
+
+  const [activeTab, setActiveTab] = useState<"pickup" | "dropoff">("pickup");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [lastSubmittedWeight, setLastSubmittedWeight] = useState(0);
@@ -25,6 +42,7 @@ export default function SetorSampahPage() {
   });
 
   const addTransaction = useWasteStore((state) => state.addTransaction);
+  const currentBalance = useWasteStore((state) => state.balance);
 
   const selectedWaste = useMemo(() => wasteCatalog.find((item) => item.name === form.wasteType), [form.wasteType]);
 
@@ -39,7 +57,7 @@ export default function SetorSampahPage() {
     e.preventDefault();
     setIsSubmitting(true);
     // Mocking an API call
-    setTimeout(() => {
+    setTimeout(async () => {
       addTransaction({
         type: form.wasteType,
         weight: Number(form.weight),
@@ -49,6 +67,29 @@ export default function SetorSampahPage() {
       setLastSubmittedWeight(Number(form.weight));
       setIsSubmitting(false);
       setIsSuccess(true);
+      
+      const newTotalBalance = currentBalance + estimatedReward;
+
+      // Trigger modern UI Toast
+      toast.success(
+        <div className="flex flex-col gap-1">
+          <span className="font-bold text-stone-900">Setoran Berhasil!</span>
+          <span className="text-emerald-700 font-medium">+ Rp ${estimatedReward.toLocaleString("id-ID")}</span>
+        </div>, 
+        { duration: 5000 }
+      );
+
+      // Trigger background Email via Server Action
+      if (user?.primaryEmailAddress?.emailAddress) {
+        sendBalanceNotificationEmail({
+          email: user.primaryEmailAddress.emailAddress,
+          name: user.fullName || user.username || "Eco Warrior",
+          amount: estimatedReward,
+          type: "deposit",
+          balance: newTotalBalance
+        });
+      }
+
       // reset form
       setForm({ wasteType: "", weight: "", address: "", date: "", notes: "" });
       
@@ -63,11 +104,70 @@ export default function SetorSampahPage() {
         <div className="md:col-span-2 space-y-6">
           <header className="flex flex-col gap-1 rounded-3xl border border-stone-200 bg-white px-5 py-4 shadow-sm sm:px-7 sm:py-5">
             <h1 className="text-2xl font-semibold text-stone-900">Jadwalkan Setor Sampah</h1>
-            <p className="text-sm text-stone-600">Pilih jenis sampah Anda dan tim kami akan melakukan pickup secara langsung.</p>
+            <p className="text-sm text-stone-600">Pilih metode penyerahan sampah Anda.</p>
+            
+            {/* Tab Navigation */}
+            <div className="mt-4 flex rounded-xl border border-stone-200 bg-stone-50 p-1">
+              <button
+                onClick={() => setActiveTab("pickup")}
+                className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all duration-200 ${
+                  activeTab === "pickup" 
+                    ? "bg-white text-stone-900 shadow-sm" 
+                    : "text-stone-500 hover:text-stone-700"
+                }`}
+              >
+                Penjemputan Ekspedisi
+              </button>
+              <button
+                onClick={() => setActiveTab("dropoff")}
+                className={`flex-1 rounded-lg py-2 text-sm font-medium transition-all duration-200 ${
+                  activeTab === "dropoff" 
+                    ? "bg-white text-stone-900 shadow-sm" 
+                    : "text-stone-500 hover:text-stone-700"
+                }`}
+              >
+                Setor Langsung (QR Drop-off)
+              </button>
+            </div>
           </header>
 
           <div className="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm p-5 sm:p-7">
-        {isSuccess ? (
+        {activeTab === "dropoff" ? (
+          <div className="flex flex-col items-center justify-center text-center py-6 px-4">
+            <div className="rounded-full bg-emerald-100 p-4 mb-4">
+              <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-stone-900 mb-2">QR Code Drop-off Anda</h3>
+            <p className="text-sm text-stone-600 mt-1 max-w-sm mx-auto mb-8">
+              Bawa sampah Anda ke agen Drop-off point terdekat dan tunjukkan kode QR ini kepada petugas untuk discan.
+            </p>
+            
+            <div className="p-4 bg-white border-2 border-dashed border-emerald-300 rounded-3xl inline-block shadow-sm">
+              <QRCodeCanvas 
+                value={`wastebank://scan/${user?.id || 'mock_user_id'}`}
+                size={220}
+                bgColor={"#ffffff"}
+                fgColor={"#064e3b"}
+                level={"H"}
+                includeMargin={false}
+              />
+            </div>
+            
+            <div className="mt-8 rounded-xl bg-stone-50 border border-stone-200 p-4 w-full text-left">
+              <h4 className="font-semibold text-stone-800 text-sm mb-2 flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-200 text-xs text-stone-600">i</span>
+                Cara Kerja
+              </h4>
+              <ul className="text-sm text-stone-600 space-y-2 list-disc list-inside px-1">
+                <li>Datangi mitra pengepul terdekat.</li>
+                <li>Tunjukkan layar HP Anda ke petugas administrasi.</li>
+                <li>Petugas akan menscan, menimbang sampah Anda, dan otomatis saldo serta XP Anda akan bertambah!</li>
+              </ul>
+            </div>
+          </div>
+        ) : isSuccess ? (
           <div className="rounded-2xl bg-emerald-50 p-6 text-center">
             <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -194,7 +294,10 @@ export default function SetorSampahPage() {
                       {item.category}
                     </span>
                   </div>
-                  <span className="text-sm font-bold text-emerald-700">Rp {item.pricePerKg.toLocaleString("id-ID")}</span>
+                  <span className="text-sm font-bold text-emerald-700 flex flex-col items-end">
+                    <span>Rp {item.pricePerKg.toLocaleString("id-ID")}</span>
+                    {bonusPercentage > 0 && <span className="mt-0.5 text-[9px] text-emerald-600 font-bold bg-emerald-100/80 px-1 py-0.5 rounded-sm">Bonus Tier {tier} +{bonusPercentage}%</span>}
+                  </span>
                 </div>
               ))}
             </div>
