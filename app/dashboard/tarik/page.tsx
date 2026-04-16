@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useWasteStore } from "@/store/useWasteStore";
+import Link from "next/link";
 
 export default function TarikSaldoPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -12,8 +14,12 @@ export default function TarikSaldoPage() {
     amount: ""
   });
 
-  // Contoh saldo dummy (normalnya ditarik dari database / global state)
-  const availableBalance = 875000;
+  const { balance, withdrawals, requestWithdrawal } = useWasteStore();
+
+  const totalPendingOrSent = withdrawals
+    .filter(w => w.status !== 'Ditolak')
+    .reduce((acc, w) => acc + w.amount, 0);
+  const availableBalance = balance - totalPendingOrSent;
 
   const getAmountNumber = (amountString: string) => {
     return Number(amountString.replace(/[^0-9]/g, ''));
@@ -40,12 +46,24 @@ export default function TarikSaldoPage() {
     setIsSubmitting(true);
     // Mocking API call for withdrawal
     setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
-      setForm({ method: "bank_transfer", accountNumber: "", accountName: "", amount: "" });
+      const success = requestWithdrawal({
+        method: form.method,
+        accountName: form.accountName,
+        accountNumber: form.accountNumber,
+        amount: withdrawValue
+      });
+      
+      if (success) {
+        setIsSubmitting(false);
+        setIsSuccess(true);
+        setForm({ method: "bank_transfer", accountNumber: "", accountName: "", amount: "" });
 
-      // remove success banner after 4s
-      setTimeout(() => setIsSuccess(false), 4000);
+        // remove success banner after 5s
+        setTimeout(() => setIsSuccess(false), 5000);
+      } else {
+        setIsSubmitting(false);
+        alert("Terjadi kesalahan saat memproses penarikan.");
+      }
     }, 1500);
   };
 
@@ -53,9 +71,17 @@ export default function TarikSaldoPage() {
     <div className="mx-auto w-full max-w-4xl space-y-6">
       <div className="grid gap-6 md:grid-cols-3">
         <div className="md:col-span-2 space-y-6">
-          <header className="flex flex-col gap-1 rounded-3xl border border-stone-200 bg-white px-5 py-4 shadow-sm sm:px-7 sm:py-5">
+          <header className="flex flex-col gap-2 rounded-3xl border border-stone-200 bg-white px-5 py-4 shadow-sm sm:px-7 sm:py-5">
             <h1 className="text-2xl font-semibold text-stone-900">Tarik Saldo Reward</h1>
-            <p className="text-sm text-stone-600">Pindahkan saldo WasteBank Anda ke rekening bank atau e-wallet pilihan.</p>
+            <p className="text-sm text-stone-600">Pindahkan saldo WasteBank Anda ke rekening bank atau e-wallet pilihan. Penarikan akan <span className="font-semibold text-stone-800">diverifikasi terlebih dahulu</span>.</p>
+            <div className="mt-2 flex">
+              <Link href="/dashboard/tarik/status" className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline">
+                Lihat Status Penarikan
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
           </header>
 
           <div className="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm p-5 sm:p-7">
@@ -63,11 +89,16 @@ export default function TarikSaldoPage() {
               <div className="rounded-2xl bg-emerald-50 p-6 text-center">
                 <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
                   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </span>
                 <p className="text-lg font-semibold text-emerald-800">Penarikan Berhasil Diajukan</p>
-                <p className="mt-2 text-sm text-emerald-700">Dana sedang diproses dan akan masuk ke rekening Anda maksimal 1x24 jam kerja.</p>
+                <p className="mt-2 text-sm text-emerald-700">Permintaan penarikan Anda sedang <span className="font-semibold">menunggu verifikasi admin</span>.</p>
+                <div className="mt-5">
+                  <Link href="/dashboard/tarik/status" className="inline-block rounded-full bg-emerald-700 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-800">
+                    Cek Status Penarikan
+                  </Link>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
@@ -131,7 +162,7 @@ export default function TarikSaldoPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting || !form.amount}
-                    className="w-full rounded-full bg-stone-900 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-stone-800 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="w-full rounded-full bg-stone-900 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-stone-800 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
                   >
                     {isSubmitting ? "Memproses Transaksi..." : "Tarik Dana Sekarang"}
                   </button>
@@ -143,23 +174,28 @@ export default function TarikSaldoPage() {
 
         {/* Right Info Sidebar */}
         <div className="space-y-4">
-          <div className="rounded-3xl border border-stone-200 bg-stone-900 p-5 shadow-sm sm:p-6 text-white">
-            <p className="text-sm font-medium text-stone-400">Total Saldo Tersedia</p>
+          <div className="group rounded-3xl border border-stone-200 bg-stone-900 p-5 shadow-sm sm:p-6 text-white transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+            <p className="text-sm font-medium text-stone-400 group-hover:text-stone-300 transition-colors">Total Saldo Tersedia</p>
             <p className="mt-2 text-3xl font-semibold">Rp {availableBalance.toLocaleString("id-ID")}</p>
+            {totalPendingOrSent > 0 && (
+              <p className="mt-2 inline-flex rounded-full bg-stone-800 px-3 py-1 text-xs font-medium text-stone-300">
+                Tertahan (Pending): Rp {totalPendingOrSent.toLocaleString("id-ID")}
+              </p>
+            )}
             <div className="mt-5 border-t border-stone-700 pt-4">
               <p className="text-xs text-stone-400">Gunakan sisa kuota dengan bijak, tidak ada potongan biaya administrasi bulanan.</p>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
-            <h3 className="font-semibold text-emerald-900 flex items-center gap-2">
+          <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm transition-all duration-300 hover:shadow-md hover:bg-emerald-100/50">
+            <h3 className="font-semibold text-emerald-900 flex items-center gap-2 transform transition-transform group-hover:translate-x-1">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Informasi Penting
             </h3>
             <ul className="mt-3 text-sm text-emerald-800 space-y-2 list-disc list-inside">
-              <li>Penarikan diproses 1x24 jam kerja hari senin s/d jum&apos;at.</li>
+              <li>Penarikan akan diverifikasi oleh tim admin kami (maks 1x24 jam kerja).</li>
               <li>Minimal penarikan e-wallet Rp 50k, sementara Bank Lokal Rp 100k.</li>
               <li>Awas penipuan! Verifikasi rekening via OTP Clerk.</li>
             </ul>

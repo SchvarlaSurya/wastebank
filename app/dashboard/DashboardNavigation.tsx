@@ -43,6 +43,15 @@ const navigation = [
     )
   },
   { 
+    name: "Leaderboard XP", 
+    href: "/dashboard/peringkat", 
+    icon: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 002.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 012.916.52 6.003 6.003 0 01-5.395 4.972m0 0a6.726 6.726 0 01-2.749 1.35m0 0a6.772 6.772 0 01-3.044 0" />
+      </svg>
+    )
+  },
+  { 
     name: "Pengaturan", 
     href: "/dashboard/pengaturan", 
     icon: (
@@ -66,13 +75,13 @@ export default function DashboardNavigation() {
           key={item.name}
           href={item.href}
           onClick={() => setMobileMenuOpen(false)}
-          className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+          className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
             isActive
               ? "bg-emerald-50 text-emerald-900 shadow-sm"
-              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"
+              : "text-stone-600 hover:bg-stone-50 hover:text-stone-900 hover:shadow-sm"
           }`}
         >
-          <div className={`transition-colors duration-200 ${isActive ? "text-emerald-700" : "text-stone-400"}`}>
+          <div className={`transition-all duration-300 transform group-hover:scale-110 ${isActive ? "text-emerald-700" : "text-stone-400 group-hover:text-emerald-600"}`}>
             {item.icon}
           </div>
           {item.name}
@@ -118,12 +127,6 @@ export default function DashboardNavigation() {
         <nav className="flex-1 space-y-1.5 px-4 py-8">
           {renderNavLinks()}
         </nav>
-        <div className="border-t border-stone-100 p-5">
-          <Link href="/" className="flex flex-col items-center gap-2 rounded-2xl bg-stone-50 px-4 py-4 text-center transition hover:bg-stone-100">
-            <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">Kembali</span>
-            <span className="text-sm font-medium text-stone-900">Ke Beranda Utama</span>
-          </Link>
-        </div>
       </aside>
 
       {/* Top Header for Mobile */}
