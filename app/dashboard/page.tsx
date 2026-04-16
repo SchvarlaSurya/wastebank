@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { useWasteStore, useUserTier } from "@/store/useWasteStore";
+import { getUserDashboardData, getGlobalWasteStats } from "@/app/actions/transaction";
 import {
   BarChart,
   Bar,
@@ -19,7 +20,39 @@ import {
 const COLORS = ["#047857", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#065f46"];
 
 export default function DashboardPage() {
-  const { balance, transactions, withdrawals } = useWasteStore();
+  const { balance, transactions, withdrawals, isHydrated, initStore } = useWasteStore();
+  const [loading, setLoading] = useState(!isHydrated);
+
+  // Global Chart States
+  const [globalDist, setGlobalDist] = useState<{name: string, value: number}[]>([]);
+  const [globalWeekly, setGlobalWeekly] = useState<{date: string, weight: number}[]>([]);
+
+  useEffect(() => {
+    if (!isHydrated) {
+      Promise.all([
+        getUserDashboardData(),
+        getGlobalWasteStats()
+      ]).then(([userRes, globalRes]) => {
+        if (userRes.success) {
+          initStore(userRes.balance || 0, userRes.transactions as any, userRes.withdrawals as any);
+        }
+        if (globalRes.success && globalRes.distributionData && globalRes.weeklyData) {
+          setGlobalDist(globalRes.distributionData);
+          setGlobalWeekly(globalRes.weeklyData);
+        }
+        setLoading(false);
+      });
+    } else {
+      // Even if user store is hydrated, we still fetch fresh global stats
+      getGlobalWasteStats().then(globalRes => {
+        if (globalRes.success && globalRes.distributionData && globalRes.weeklyData) {
+          setGlobalDist(globalRes.distributionData);
+          setGlobalWeekly(globalRes.weeklyData);
+        }
+        setLoading(false);
+      });
+    }
+  }, [isHydrated, initStore]);
 
   // Metrics Calculation
   const totalSampah = useMemo(() => transactions.reduce((acc, tx) => acc + tx.weight, 0), [transactions]);
@@ -33,47 +66,7 @@ export default function DashboardPage() {
   const theoreticalBalance = baseBalance + accumulatedRewards;
   const totalDitarik = theoreticalBalance > balance ? (theoreticalBalance - balance) : 0;
 
-  // Chart 1: Tren Mingguan (Bar Chart)
-  const weeklyData = useMemo(() => {
-    const dataMap: Record<string, number> = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      // Fallback format if timezone issues
-      const yStr = d.getFullYear();
-      const mStr = String(d.getMonth() + 1).padStart(2, "0");
-      const dStr = String(d.getDate()).padStart(2, "0");
-      const dateStr = `${yStr}-${mStr}-${dStr}`;
-      dataMap[dateStr] = 0;
-    }
-
-    transactions.forEach(tx => {
-      if (dataMap[tx.date] !== undefined) {
-        dataMap[tx.date] += tx.weight;
-      }
-    });
-
-    return Object.keys(dataMap).map(date => {
-      const parts = date.split("-");
-      return {
-        date: `${parts[2]}/${parts[1]}`, // DD/MM format
-        weight: dataMap[date]
-      };
-    });
-  }, [transactions]);
-
-  // Chart 2: Distribusi Jenis Sampah (Pie Chart)
-  const distributionData = useMemo(() => {
-    const dataMap: Record<string, number> = {};
-    transactions.forEach(tx => {
-      dataMap[tx.type] = (dataMap[tx.type] || 0) + tx.weight;
-    });
-
-    return Object.keys(dataMap).map(key => ({
-      name: key,
-      value: dataMap[key]
-    })).sort((a, b) => b.value - a.value);
-  }, [transactions]);
+  // (Chart calculations removed since we pull from global API)
 
   // Recent 5 Transactions
   const recentTransactions = transactions.slice(0, 5);
@@ -135,10 +128,10 @@ export default function DashboardPage() {
       <section className="grid gap-6 lg:grid-cols-2">
         {/* Weekly Trend Bar Chart */}
         <div className="rounded-3xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
-          <h2 className="mb-6 text-lg font-semibold text-stone-900">Tren Setoran Mingguan (kg)</h2>
+          <h2 className="mb-6 text-lg font-semibold text-stone-900">Tren Setoran Global Mingguan (kg)</h2>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+              <BarChart data={globalWeekly} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: '#78716c' }} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: '#78716c' }} />
@@ -154,15 +147,15 @@ export default function DashboardPage() {
 
         {/* Distribution Pie Chart */}
         <div className="rounded-3xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6 flex flex-col">
-          <h2 className="mb-4 text-lg font-semibold text-stone-900">Distribusi & Volume Jenis Sampah</h2>
+          <h2 className="mb-4 text-lg font-semibold text-stone-900">Distribusi Global Volume Sampah</h2>
           <div className="flex-1 flex flex-col md:flex-row w-full min-h-[280px] md:items-center gap-6">
-            {distributionData.length > 0 ? (
+            {globalDist.length > 0 ? (
               <>
                 <div className="h-[240px] w-full md:w-[55%]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={distributionData}
+                        data={globalDist}
                         cx="50%"
                         cy="50%"
                         innerRadius={70}
@@ -170,19 +163,19 @@ export default function DashboardPage() {
                         paddingAngle={3}
                         dataKey="value"
                       >
-                        {distributionData.map((entry, index) => (
+                        {globalDist.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
                       <RechartsTooltip 
-                        formatter={(value) => [`${value} kg`, 'Volume']}
+                        formatter={(value) => [`${value} kg`, 'Volume Global']}
                         contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
                       />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="w-full md:w-[45%] flex flex-col gap-3 max-h-[240px] overflow-y-auto pr-2">
-                  {distributionData.map((entry, index) => (
+                  {globalDist.map((entry, index) => (
                     <div key={entry.name} className="flex items-center justify-between text-sm py-1 border-b border-stone-50 last:border-0 hover:bg-stone-50 transition-colors rounded-lg px-2">
                       <div className="flex items-center gap-3 overflow-hidden pr-2">
                         <div className="w-3 h-3 rounded-full flex-shrink-0 shadow-sm" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>

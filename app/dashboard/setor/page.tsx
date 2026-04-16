@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useWasteStore } from "@/store/useWasteStore";
+import { useWasteStore, useUserTier } from "@/store/useWasteStore";
 import { QRCodeCanvas } from "qrcode.react";
 import { useUser } from "@clerk/nextjs";
 import { toast } from "sonner";
 import { sendBalanceNotificationEmail } from "@/app/actions/notification";
-
-import { useUserTier } from "@/store/useWasteStore";
+import { submitDeposit } from "@/app/actions/transaction";
 
 const baseWasteCatalog = [
   { id: "plastic", name: "Plastik Campur", category: "anorganik", pricePerKg: 4200 },
@@ -53,36 +52,40 @@ export default function SetorSampahPage() {
     return weight * selectedWaste.pricePerKg;
   }, [form.weight, selectedWaste]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    // Mocking an API call
-    setTimeout(async () => {
-      addTransaction({
-        type: form.wasteType,
-        weight: Number(form.weight),
-        reward: estimatedReward,
-        date: form.date
-      });
-      setLastSubmittedWeight(Number(form.weight));
-      setIsSubmitting(false);
-      setIsSuccess(true);
+    
+    try {
+      const res = await submitDeposit(Number(form.weight), form.wasteType, estimatedReward, form.date);
       
-      const newTotalBalance = currentBalance + estimatedReward;
+      if (res.success) {
+        // Optimistic UI update in Zustand without hitting DB again
+        addTransaction({
+          type: form.wasteType,
+          weight: Number(form.weight),
+          reward: estimatedReward,
+          date: form.date
+        });
 
-      // Trigger modern UI Toast
-      toast.success(
-        <div className="flex flex-col gap-1">
-          <span className="font-bold text-stone-900">Setoran Berhasil!</span>
-          <span className="text-emerald-700 font-medium">+ Rp ${estimatedReward.toLocaleString("id-ID")}</span>
-        </div>, 
-        { duration: 5000 }
-      );
+        setLastSubmittedWeight(Number(form.weight));
+        setIsSuccess(true);
+        
+        const newTotalBalance = currentBalance + estimatedReward;
 
-      // Trigger background Email via Server Action
-      if (user?.primaryEmailAddress?.emailAddress) {
-        sendBalanceNotificationEmail({
-          email: user.primaryEmailAddress.emailAddress,
+        // Trigger modern UI Toast
+        toast.success(
+          <div className="flex flex-col gap-1">
+            <span className="font-bold text-stone-900">Setoran Berhasil!</span>
+            <span className="text-emerald-700 font-medium">+ Rp ${estimatedReward.toLocaleString("id-ID")}</span>
+          </div>, 
+          { duration: 5000 }
+        );
+
+        // Trigger background Email via Server Action
+        if (user?.primaryEmailAddress?.emailAddress) {
+          sendBalanceNotificationEmail({
+            email: user.primaryEmailAddress.emailAddress,
           name: user.fullName || user.username || "Eco Warrior",
           amount: estimatedReward,
           type: "deposit",
@@ -95,7 +98,15 @@ export default function SetorSampahPage() {
       
       // hide success message after 5 seconds
       setTimeout(() => setIsSuccess(false), 5000);
-    }, 1500);
+      } else {
+        toast.error("Gagal menyimpan ke server database.");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Terjadi kesalahan jaringan.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
