@@ -30,15 +30,15 @@ export async function getUserDashboardData() {
     `;
 
     // Calculate total balance from DB source of truth
-    const totalEarnings = transactions.reduce((sum, tx) => sum + Number(tx.reward), 0);
+    // ONLY include verified or finished transactions for balance
+    const totalEarnings = transactions
+      .filter(tx => tx.status === 'verified' || tx.status === 'Selesai')
+      .reduce((sum, tx) => sum + Number(tx.reward), 0);
+
     const totalWithdrawnAndPending = withdrawals
       .filter((w) => w.status !== "Ditolak")
       .reduce((sum, w) => sum + Number(w.amount), 0);
     
-    // We provide initial balance of 875000 from the persistent mock if no physical DB tx, 
-    // but in a pure production environment, you just use the true calculated earnings.
-    // Given instructions to migrate cleanly without causing the dashboard balance to suddenly reset completely, 
-    // we'll just return the exact sum of DB entries, which starts at 0 for real users until they deposit.
     const realBalance = totalEarnings - totalWithdrawnAndPending;
 
     return {
@@ -77,24 +77,19 @@ export async function submitDeposit(weight: number, type: string, reward: number
   const txId = `TX-${Math.floor(1000 + Math.random() * 9000)}`;
   const date = dateStr ? new Date(dateStr) : new Date();
 
+  const pricePerKg = weight > 0 ? reward / weight : 0;
+
   try {
+    // Initial status is 'pending' to require admin verification
     await sql`
-      INSERT INTO transactions (user_id, tx_id, type, weight, reward, date, status)
-      VALUES (${user.id}, ${txId}, ${type}, ${weight}, ${reward}, ${date}, 'Selesai')
+      INSERT INTO transactions (user_id, tx_id, type, weight, reward, date, status, price_per_kg)
+      VALUES (${user.id}, ${txId}, ${type}, ${weight}, ${reward}, ${date}, 'pending', ${pricePerKg})
     `;
 
-    // Optionally update user_profile summary
-    await sql`
-      INSERT INTO user_profiles (user_id, total_xp, kumulatif_sampah_kg)
-      VALUES (${user.id}, ${weight * 50}, ${weight})
-      ON CONFLICT (user_id) 
-      DO UPDATE SET 
-        total_xp = user_profiles.total_xp + ${weight * 50},
-        kumulatif_sampah_kg = user_profiles.kumulatif_sampah_kg + ${weight},
-        updated_at = NOW()
-    `;
-
+    // Note: user_profiles update (XP/Cumulative) will be handled by admin verification
+    
     revalidatePath("/dashboard");
+    revalidatePath("/admin/transaksi");
     return { success: true, txId };
   } catch (error) {
     console.error("Error submitting deposit:", error);
@@ -127,20 +122,22 @@ export async function submitWithdrawal(method: string, accountName: string, acco
 
 export async function getGlobalWasteStats() {
   try {
-    // 1. Distribusi Jenis Sampah (All users) - MONTHLY
+    // 1. Distribusi Jenis Sampah (All users) - MONTHLY - Only Verified
     const distributionRaw = await sql`
       SELECT type as name, SUM(weight) as value 
       FROM transactions 
-      WHERE date >= date_trunc('month', NOW())
+      WHERE (status = 'verified' OR status = 'Selesai') 
+        AND date >= date_trunc('month', NOW())
       GROUP BY type 
       ORDER BY value DESC
     `;
 
-    // 2. Tren Seminggu (All users) - CURRENT WEEK (Monday-Sunday)
+    // 2. Tren Seminggu (All users) - CURRENT WEEK (Monday-Sunday) - Only Verified
     const weeklyRaw = await sql`
       SELECT DATE(date) as dt, SUM(weight) as total 
       FROM transactions 
-      WHERE date >= date_trunc('week', NOW())
+      WHERE (status = 'verified' OR status = 'Selesai')
+        AND date >= date_trunc('week', NOW())
       GROUP BY DATE(date)
       ORDER BY dt ASC
     `;
@@ -190,6 +187,53 @@ export async function getGlobalWasteStats() {
     };
   } catch (error) {
     console.error("Error fetching global stats:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function getWasteCatalog() {
+  try {
+    const catalog = await sql`
+      SELECT id, name, category, price_per_kg as "pricePerKg"
+      FROM waste_catalog
+      ORDER BY name ASC
+    `;
+    return { 
+      success: true, 
+      data: catalog.map(item => ({
+        ...item,
+        pricePerKg: Number(item.pricePerKg)
+      }))
+    };
+  } catch (error) {
+    console.error("Error fetching waste catalog:", error);
+    return { success: false, error: String(error) };
+  }
+}
+export async function getUserNotifications() {
+  const user = await currentUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  try {
+    const notifications = await sql`
+      SELECT id, title, message, type, is_read as "isRead", created_at as "createdAt"
+      FROM notifications
+      WHERE user_id = ${user.id}
+      ORDER BY created_at DESC
+      LIMIT 20
+    `;
+    return { success: true, data: notifications };
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function markNotificationAsRead(id: number) {
+  try {
+    await sql`UPDATE notifications SET is_read = true WHERE id = ${id}`;
+    return { success: true };
+  } catch (error) {
     return { success: false, error: String(error) };
   }
 }

@@ -1,63 +1,67 @@
 "use client";
 
-import { useMemo } from "react";
-import { useAdminStore } from "@/store/useAdminStore";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
 } from "recharts";
 import { transactionStatusLabel } from "@/lib/types";
+import { getDashboardOverviewStats, AdminStats, getAllTransactionsAdmin } from "@/app/actions/adminDashboard";
+import { getActivityLog } from "@/app/actions/adminVerification";
 
 export default function AdminOverviewPage() {
-  const {
-    nasabahList, transactions, wasteCatalog, activityLog,
-    getTotalBalance, getTodayWeight, getPendingCount, getActiveNasabahCount,
-  } = useAdminStore();
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [recentTx, setRecentTx] = useState<any[]>([]);
+  const [recentLogs, setRecentLogs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const totalBalance = getTotalBalance();
-  const todayWeight = getTodayWeight();
-  const pendingCount = getPendingCount();
-  const activeNasabah = getActiveNasabahCount();
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+      try {
+        const [statsRes, txRes, logsRes] = await Promise.all([
+          getDashboardOverviewStats(),
+          getAllTransactionsAdmin(),
+          getActivityLog(5)
+        ]);
 
-  // Monthly weight by category
-  const monthlyByCategory = useMemo(() => {
-    const now = new Date();
-    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const map: Record<string, number> = {};
-    transactions
-      .filter((tx) => tx.date.startsWith(thisMonth) && tx.status === "verified")
-      .forEach((tx) => {
-        map[tx.wasteType] = (map[tx.wasteType] || 0) + (tx.actualWeight || 0);
-      });
-    return Object.entries(map).map(([name, weight]) => ({ name, weight })).sort((a, b) => b.weight - a.weight);
-  }, [transactions]);
+        if (statsRes.success && statsRes.data) {
+          setStats(statsRes.data);
+        }
 
-  // Weekly trend
-  const weeklyData = useMemo(() => {
-    const dataMap: Record<string, number> = {};
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      dataMap[dateStr] = 0;
+        if (txRes.success && txRes.data) {
+          // Get recent 5 transactions
+          setRecentTx(txRes.data.slice(0, 5));
+        }
+
+        if (logsRes.success && logsRes.logs) {
+          setRecentLogs(logsRes.logs);
+        }
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
     }
-    transactions
-      .filter((tx) => tx.status === "verified")
-      .forEach((tx) => {
-        if (dataMap[tx.date] !== undefined) dataMap[tx.date] += tx.actualWeight || 0;
-      });
-    return Object.keys(dataMap).map((date) => {
-      const parts = date.split("-");
-      return { date: `${parts[2]}/${parts[1]}`, weight: dataMap[date] };
-    });
-  }, [transactions]);
 
-  // Recent 5 transactions
-  const recentTx = transactions.slice(0, 5);
+    loadData();
+  }, []);
 
-  // Recent 5 logs
-  const recentLogs = activityLog.slice(0, 5);
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl flex h-[50vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+    );
+  }
+
+  const totalBalance = stats?.totalBalance || 0;
+  const todayWeight = stats?.todayWeight || 0;
+  const pendingCount = stats?.pendingCount || 0;
+  const activeNasabah = stats?.activeNasabahCount || 0;
+  const monthlyByCategory = stats?.monthlyByCategory || [];
+  const weeklyData = stats?.weeklyData || [];
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-12">
@@ -110,7 +114,7 @@ export default function AdminOverviewPage() {
               Nasabah Aktif
             </div>
             <p className="mt-3 text-3xl font-bold text-stone-900">{activeNasabah} <span className="text-lg text-stone-400">orang</span></p>
-            <p className="mt-1 text-xs text-stone-400">Dari total {nasabahList.length} nasabah</p>
+            <p className="mt-1 text-xs text-stone-400">Total partisipan di sistem</p>
           </div>
         </article>
 
@@ -201,21 +205,21 @@ export default function AdminOverviewPage() {
             </Link>
           </div>
           <div className="divide-y divide-stone-100">
-            {recentTx.map((tx) => (
+            {recentTx.length > 0 ? recentTx.map((tx) => (
               <div key={tx.id} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-stone-50/50 transition-colors">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-stone-800 truncate">{tx.nasabahName}</p>
-                  <p className="text-xs text-stone-500 truncate">{tx.wasteType} · {tx.estimatedWeight}kg · {tx.id}</p>
+                  <p className="text-sm font-medium text-stone-800 truncate">{tx.user_id}</p>
+                  <p className="text-xs text-stone-500 truncate">{tx.waste_type} · {tx.estimated_weight}kg · {tx.tx_id}</p>
                 </div>
                 <span className={`flex-shrink-0 inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                   tx.status === "pending" ? "bg-amber-100 text-amber-800" :
                   tx.status === "verified" ? "bg-emerald-100 text-emerald-800" :
                   "bg-red-100 text-red-800"
                 }`}>
-                  {transactionStatusLabel[tx.status]}
+                  {transactionStatusLabel[tx.status as keyof typeof transactionStatusLabel] || tx.status}
                 </span>
               </div>
-            ))}
+            )) : <p className="p-4 text-center text-sm text-stone-400">Belum ada transaksi</p>}
           </div>
         </div>
 
@@ -228,15 +232,15 @@ export default function AdminOverviewPage() {
             </Link>
           </div>
           <div className="divide-y divide-stone-100">
-            {recentLogs.map((log) => (
+            {recentLogs.length > 0 ? recentLogs.map((log) => (
               <div key={log.id} className="px-5 py-3 hover:bg-stone-50/50 transition-colors">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-stone-800">{log.actionLabel}</p>
+                  <p className="text-sm font-medium text-stone-800">{log.action}</p>
                   <span className="flex-shrink-0 text-[10px] text-stone-400">{log.adminName}</span>
                 </div>
-                <p className="mt-0.5 text-xs text-stone-500 truncate">{log.target} — {log.detail}</p>
+                <p className="mt-0.5 text-xs text-stone-500 truncate">{log.targetId || log.targetType} — {log.details}</p>
               </div>
-            ))}
+            )) : <p className="p-4 text-center text-sm text-stone-400">Belum ada log aktivitas</p>}
           </div>
         </div>
       </section>

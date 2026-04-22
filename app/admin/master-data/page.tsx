@@ -1,36 +1,79 @@
 "use client";
 
-import { useState } from "react";
-import { useAdminStore } from "@/store/useAdminStore";
+import { useState, useEffect } from "react";
 import { categoryLabel, type WasteCategory } from "@/lib/types";
-
-const ADMIN_NAME = "Admin Schvarla";
+import { getWasteCatalogAdmin, updateWastePrice, addWasteCategory } from "@/app/actions/adminDashboard";
 
 export default function MasterDataPage() {
-  const { wasteCatalog, updatePrice, addWasteCategory } = useAdminStore();
+  const [wasteCatalog, setWasteCatalog] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState("");
   const [showAdd, setShowAdd] = useState(false);
-  const [newItem, setNewItem] = useState({ id: "", name: "", category: "anorganik" as WasteCategory, pricePerKg: "" });
+  const [newItem, setNewItem] = useState({ name: "", category: "anorganik" as WasteCategory, pricePerKg: "" });
 
-  const handleSavePrice = (wasteId: string) => {
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await getWasteCatalogAdmin();
+      if (res.success && res.data) {
+        setWasteCatalog(res.data);
+      }
+    } catch (error) {
+      console.error("Error loading waste catalog:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleSavePrice = async (wasteId: string) => {
     const price = Number(editPrice);
     if (!price || price <= 0) return;
-    updatePrice(wasteId, price, ADMIN_NAME);
-    setEditingId(null);
-    setEditPrice("");
+    setIsProcessing(true);
+    try {
+      const res = await updateWastePrice(wasteId, price);
+      if (res.success) {
+        await loadData();
+        setEditingId(null);
+        setEditPrice("");
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleAdd = () => {
-    if (!newItem.id || !newItem.name || !newItem.pricePerKg) return;
-    addWasteCategory(
-      { id: newItem.id, name: newItem.name, category: newItem.category, pricePerKg: Number(newItem.pricePerKg) },
-      ADMIN_NAME
-    );
-    setNewItem({ id: "", name: "", category: "anorganik", pricePerKg: "" });
-    setShowAdd(false);
+  const handleAdd = async () => {
+    if (!newItem.name || !newItem.pricePerKg) return;
+    setIsProcessing(true);
+    try {
+      const res = await addWasteCategory(newItem.name, newItem.category, Number(newItem.pricePerKg));
+      if (res.success) {
+        await loadData();
+        setNewItem({ name: "", category: "anorganik", pricePerKg: "" });
+        setShowAdd(false);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl flex h-[50vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6 pb-12">
@@ -67,17 +110,7 @@ export default function MasterDataPage() {
         <div className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm space-y-4">
           <h3 className="font-semibold text-stone-900">Tambah Kategori Baru</h3>
           <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-stone-600">ID (unik)</label>
-              <input
-                type="text"
-                placeholder="contoh: styrofoam"
-                value={newItem.id}
-                onChange={(e) => setNewItem({ ...newItem, id: e.target.value })}
-                className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="mb-1 block text-xs font-medium text-stone-600">Nama Jenis Sampah</label>
               <input
                 type="text"
@@ -85,6 +118,7 @@ export default function MasterDataPage() {
                 value={newItem.name}
                 onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
                 className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                disabled={isProcessing}
               />
             </div>
             <div>
@@ -93,6 +127,7 @@ export default function MasterDataPage() {
                 value={newItem.category}
                 onChange={(e) => setNewItem({ ...newItem, category: e.target.value as WasteCategory })}
                 className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                disabled={isProcessing}
               >
                 <option value="anorganik">Anorganik</option>
                 <option value="organik">Organik</option>
@@ -108,19 +143,21 @@ export default function MasterDataPage() {
                 value={newItem.pricePerKg}
                 onChange={(e) => setNewItem({ ...newItem, pricePerKg: e.target.value })}
                 className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                disabled={isProcessing}
               />
             </div>
           </div>
           <div className="flex gap-2 pt-2">
             <button
               onClick={handleAdd}
-              disabled={!newItem.id || !newItem.name || !newItem.pricePerKg}
+              disabled={!newItem.name || !newItem.pricePerKg || isProcessing}
               className="rounded-xl bg-emerald-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 transition"
             >
-              Simpan
+              {isProcessing ? "Menyimpan..." : "Simpan"}
             </button>
             <button
               onClick={() => setShowAdd(false)}
+              disabled={isProcessing}
               className="rounded-xl border border-stone-200 bg-white px-5 py-2.5 text-sm font-medium text-stone-600 hover:bg-stone-50 transition"
             >
               Batal
@@ -154,7 +191,7 @@ export default function MasterDataPage() {
                       item.category === "organik" ? "bg-green-100 text-green-800" :
                       "bg-purple-100 text-purple-800"
                     }`}>
-                      {categoryLabel[item.category]}
+                      {categoryLabel[item.category as WasteCategory] || item.category}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
@@ -168,13 +205,14 @@ export default function MasterDataPage() {
                           onChange={(e) => setEditPrice(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && handleSavePrice(item.id)}
                           className="w-24 rounded-lg border border-emerald-300 px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
+                          disabled={isProcessing}
                         />
-                        <button onClick={() => handleSavePrice(item.id)} className="text-emerald-600 hover:text-emerald-800">
+                        <button onClick={() => handleSavePrice(item.id)} className="text-emerald-600 hover:text-emerald-800" disabled={isProcessing}>
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                           </svg>
                         </button>
-                        <button onClick={() => setEditingId(null)} className="text-stone-400 hover:text-stone-600">
+                        <button onClick={() => setEditingId(null)} className="text-stone-400 hover:text-stone-600" disabled={isProcessing}>
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                           </svg>
@@ -182,22 +220,18 @@ export default function MasterDataPage() {
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-stone-900">Rp {item.pricePerKg.toLocaleString("id-ID")}</span>
-                        {item.previousPrice !== undefined && item.previousPrice !== item.pricePerKg && (
-                          <span className={`text-[10px] font-bold ${item.pricePerKg > item.previousPrice ? "text-emerald-600" : "text-red-600"}`}>
-                            {item.pricePerKg > item.previousPrice ? "▲" : "▼"}
-                          </span>
-                        )}
+                        <span className="font-semibold text-stone-900">Rp {Number(item.price_per_kg || 0).toLocaleString("id-ID")}</span>
                       </div>
                     )}
                   </td>
                   <td className="px-5 py-3.5 hidden sm:table-cell">
-                    <span className="text-stone-500">{item.updatedAt}</span>
+                    <span className="text-stone-500">{item.updated_at ? new Date(item.updated_at).toLocaleDateString("id-ID") : "-"}</span>
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {editingId !== item.id && (
                       <button
-                        onClick={() => { setEditingId(item.id); setEditPrice(String(item.pricePerKg)); }}
+                        onClick={() => { setEditingId(item.id); setEditPrice(String(item.price_per_kg)); }}
+                        disabled={isProcessing}
                         className="rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-200 transition"
                       >
                         Edit Harga

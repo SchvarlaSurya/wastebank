@@ -32,31 +32,25 @@ export default function DashboardPage() {
   const [timeToMonthEnd, setTimeToMonthEnd] = useState<string>("");
 
   useEffect(() => {
-    if (!isHydrated) {
-      Promise.all([
-        getUserDashboardData(),
-        getGlobalWasteStats()
-      ]).then(([userRes, globalRes]) => {
-        if (userRes.success) {
-          initStore(userRes.balance || 0, userRes.transactions as any, userRes.withdrawals as any);
-        }
-        if (globalRes.success && globalRes.distributionData && globalRes.weeklyData) {
-          setGlobalDist(globalRes.distributionData);
-          setGlobalWeekly(globalRes.weeklyData);
-        }
-        setLoading(false);
-      });
-    } else {
-      // Even if user store is hydrated, we still fetch fresh global stats
-      getGlobalWasteStats().then(globalRes => {
-        if (globalRes.success && globalRes.distributionData && globalRes.weeklyData) {
-          setGlobalDist(globalRes.distributionData);
-          setGlobalWeekly(globalRes.weeklyData);
-        }
-        setLoading(false);
-      });
-    }
-  }, [isHydrated, initStore]);
+    // Always fetch fresh user data to see balance updates after admin verification
+    setLoading(true);
+    Promise.all([
+      getUserDashboardData(),
+      getGlobalWasteStats()
+    ]).then(([userRes, globalRes]) => {
+      if (userRes.success) {
+        initStore(userRes.balance || 0, userRes.transactions as any, userRes.withdrawals as any);
+      }
+      if (globalRes.success && globalRes.distributionData && globalRes.weeklyData) {
+        setGlobalDist(globalRes.distributionData);
+        setGlobalWeekly(globalRes.weeklyData);
+      }
+      setLoading(false);
+    }).catch(err => {
+      console.error("Dashboard fetch error:", err);
+      setLoading(false);
+    });
+  }, [initStore]);
 
   // Timer Effect
   useEffect(() => {

@@ -1,19 +1,44 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAdminStore } from "@/store/useAdminStore";
-import { transactionStatusLabel, type TransactionStatus, type AdminTransaction } from "@/lib/types";
-
-const ADMIN_NAME = "Admin Schvarla";
+import { useState, useMemo, useEffect } from "react";
+import { transactionStatusLabel, type TransactionStatus } from "@/lib/types";
+import { getAllTransactionsAdmin, getWasteCatalogAdmin } from "@/app/actions/adminDashboard";
+import { verifyTransaction, rejectTransaction } from "@/app/actions/adminVerification";
 
 export default function TransaksiPage() {
-  const { transactions, wasteCatalog, verifyTransaction, rejectTransaction } = useAdminStore();
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [wasteCatalog, setWasteCatalog] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [filter, setFilter] = useState<"all" | TransactionStatus>("all");
-  const [selectedTx, setSelectedTx] = useState<AdminTransaction | null>(null);
+  const [selectedTx, setSelectedTx] = useState<any | null>(null);
   const [actualWeight, setActualWeight] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [mode, setMode] = useState<"verify" | "reject" | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  async function loadData() {
+    try {
+      const [txRes, catalogRes] = await Promise.all([
+        getAllTransactionsAdmin(),
+        getWasteCatalogAdmin()
+      ]);
+      if (txRes.success && txRes.data) {
+        setTransactions(txRes.data);
+      }
+      if (catalogRes.success && catalogRes.data) {
+        setWasteCatalog(catalogRes.data);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const filtered = useMemo(() => {
     if (filter === "all") return transactions;
@@ -25,8 +50,8 @@ export default function TransaksiPage() {
   // Auto-calculate reward from current catalog price
   const currentPrice = useMemo(() => {
     if (!selectedTx) return 0;
-    const catalogItem = wasteCatalog.find((w) => w.name === selectedTx.wasteType);
-    return catalogItem?.pricePerKg || selectedTx.pricePerKg;
+    const catalogItem = wasteCatalog.find((w) => w.name === selectedTx.waste_type);
+    return catalogItem ? Number(catalogItem.price_per_kg) : Number(selectedTx.price_per_kg);
   }, [selectedTx, wasteCatalog]);
 
   const autoReward = useMemo(() => {
@@ -35,38 +60,56 @@ export default function TransaksiPage() {
     return w * currentPrice;
   }, [actualWeight, currentPrice]);
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     if (!selectedTx || !actualWeight || Number(actualWeight) <= 0) return;
-    verifyTransaction(selectedTx.id, Number(actualWeight), ADMIN_NAME);
-    setSelectedTx(null);
-    setActualWeight("");
-    setMode(null);
+    setIsProcessing(true);
+    try {
+      await verifyTransaction(selectedTx.tx_id, Number(actualWeight));
+      await loadData();
+      setSelectedTx(null);
+      setActualWeight("");
+      setMode(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selectedTx || !rejectReason) return;
-    rejectTransaction(selectedTx.id, rejectReason, ADMIN_NAME);
-    setSelectedTx(null);
-    setRejectReason("");
-    setMode(null);
+    setIsProcessing(true);
+    try {
+      await rejectTransaction(selectedTx.tx_id, rejectReason);
+      await loadData();
+      setSelectedTx(null);
+      setRejectReason("");
+      setMode(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const openModal = (tx: AdminTransaction) => {
+  const openModal = (tx: any) => {
     setSelectedTx(tx);
-    setActualWeight(String(tx.estimatedWeight));
+    setActualWeight(String(tx.estimated_weight));
     setRejectReason("");
     setMode(tx.status === "pending" ? "verify" : null);
   };
 
-  const statusBadge = (status: TransactionStatus) => {
+  const statusBadge = (status: TransactionStatus | string) => {
+    const rawStatus = status as TransactionStatus;
     const styles: Record<TransactionStatus, string> = {
       pending: "bg-amber-100 text-amber-800",
       verified: "bg-emerald-100 text-emerald-800",
       rejected: "bg-red-100 text-red-800",
+      Selesai: "bg-emerald-100 text-emerald-800",
     };
     return (
-      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${styles[status]}`}>
-        {transactionStatusLabel[status]}
+      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${styles[rawStatus] || "bg-stone-100 text-stone-800"}`}>
+        {transactionStatusLabel[rawStatus] || status}
       </span>
     );
   };
@@ -74,9 +117,17 @@ export default function TransaksiPage() {
   const tabs = [
     { key: "all" as const, label: "Semua", count: transactions.length },
     { key: "pending" as const, label: "Pending", count: pendingCount },
-    { key: "verified" as const, label: "Terverifikasi", count: transactions.filter((t) => t.status === "verified").length },
+    { key: "verified" as const, label: "Terverifikasi", count: transactions.filter((t) => t.status === "verified" || t.status === "Selesai").length },
     { key: "rejected" as const, label: "Ditolak", count: transactions.filter((t) => t.status === "rejected").length },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl flex h-[50vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-12">
@@ -125,7 +176,7 @@ export default function TransaksiPage() {
             <thead>
               <tr className="border-b border-stone-100 bg-stone-50 text-left">
                 <th className="px-5 py-3 font-medium text-stone-600">ID</th>
-                <th className="px-5 py-3 font-medium text-stone-600">Nasabah</th>
+                <th className="px-5 py-3 font-medium text-stone-600">Nasabah ID</th>
                 <th className="px-5 py-3 font-medium text-stone-600 hidden sm:table-cell">Jenis Sampah</th>
                 <th className="px-5 py-3 font-medium text-stone-600 hidden md:table-cell">Estimasi</th>
                 <th className="px-5 py-3 font-medium text-stone-600 hidden md:table-cell">Tanggal</th>
@@ -137,14 +188,14 @@ export default function TransaksiPage() {
               {filtered.map((tx) => (
                 <tr key={tx.id} className={`hover:bg-stone-50/50 transition-colors ${tx.status === "pending" ? "bg-amber-50/30" : ""}`}>
                   <td className="px-5 py-3.5">
-                    <span className="font-mono text-xs text-stone-500">{tx.id}</span>
+                    <span className="font-mono text-xs text-stone-500">{tx.tx_id}</span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <p className="font-medium text-stone-800">{tx.nasabahName}</p>
+                    <p className="font-medium text-stone-800">{tx.user_id}</p>
                   </td>
-                  <td className="px-5 py-3.5 hidden sm:table-cell text-stone-600">{tx.wasteType}</td>
-                  <td className="px-5 py-3.5 hidden md:table-cell text-stone-600">{tx.estimatedWeight} kg</td>
-                  <td className="px-5 py-3.5 hidden md:table-cell text-stone-500">{tx.date}</td>
+                  <td className="px-5 py-3.5 hidden sm:table-cell text-stone-600">{tx.waste_type}</td>
+                  <td className="px-5 py-3.5 hidden md:table-cell text-stone-600">{tx.estimated_weight} kg</td>
+                  <td className="px-5 py-3.5 hidden md:table-cell text-stone-500">{new Date(tx.created_at).toLocaleDateString("id-ID")}</td>
                   <td className="px-5 py-3.5">{statusBadge(tx.status)}</td>
                   <td className="px-5 py-3.5 text-right">
                     <button
@@ -180,9 +231,9 @@ export default function TransaksiPage() {
                 <h3 className="text-lg font-semibold text-stone-900">
                   {selectedTx.status === "pending" ? "Proses Transaksi" : "Detail Transaksi"}
                 </h3>
-                <p className="text-sm text-stone-500">{selectedTx.id}</p>
+                <p className="text-sm text-stone-500">{selectedTx.tx_id}</p>
               </div>
-              <button onClick={() => { setSelectedTx(null); setMode(null); }} className="rounded-full p-2 text-stone-400 hover:bg-stone-100">
+              <button onClick={() => { setSelectedTx(null); setMode(null); }} className="rounded-full p-2 text-stone-400 hover:bg-stone-100" disabled={isProcessing}>
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -193,16 +244,16 @@ export default function TransaksiPage() {
               {/* Transaction Info */}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl bg-stone-50 p-3">
-                  <p className="text-[10px] font-medium text-stone-500 uppercase tracking-wider">Nasabah</p>
-                  <p className="mt-1 text-sm font-medium text-stone-800">{selectedTx.nasabahName}</p>
+                  <p className="text-[10px] font-medium text-stone-500 uppercase tracking-wider">Nasabah ID</p>
+                  <p className="mt-1 text-xs font-medium text-stone-800">{selectedTx.user_id}</p>
                 </div>
                 <div className="rounded-xl bg-stone-50 p-3">
                   <p className="text-[10px] font-medium text-stone-500 uppercase tracking-wider">Jenis Sampah</p>
-                  <p className="mt-1 text-sm font-medium text-stone-800">{selectedTx.wasteType}</p>
+                  <p className="mt-1 text-sm font-medium text-stone-800">{selectedTx.waste_type}</p>
                 </div>
                 <div className="rounded-xl bg-stone-50 p-3">
                   <p className="text-[10px] font-medium text-stone-500 uppercase tracking-wider">Estimasi Berat</p>
-                  <p className="mt-1 text-sm font-medium text-stone-800">{selectedTx.estimatedWeight} kg</p>
+                  <p className="mt-1 text-sm font-medium text-stone-800">{selectedTx.estimated_weight} kg</p>
                 </div>
                 <div className="rounded-xl bg-stone-50 p-3">
                   <p className="text-[10px] font-medium text-stone-500 uppercase tracking-wider">Harga Master Data</p>
@@ -219,21 +270,20 @@ export default function TransaksiPage() {
 
               {/* Already processed info */}
               {selectedTx.status !== "pending" && (
-                <div className={`rounded-xl p-4 ${selectedTx.status === "verified" ? "bg-emerald-50 border border-emerald-100" : "bg-red-50 border border-red-100"}`}>
+                <div className={`rounded-xl p-4 ${selectedTx.status === "verified" || selectedTx.status === "Selesai" ? "bg-emerald-50 border border-emerald-100" : "bg-red-50 border border-red-100"}`}>
                   <div className="flex items-center justify-between">
-                    <p className={`text-sm font-semibold ${selectedTx.status === "verified" ? "text-emerald-800" : "text-red-800"}`}>
-                      {selectedTx.status === "verified" ? "✓ Terverifikasi" : "✕ Ditolak"}
+                    <p className={`text-sm font-semibold ${selectedTx.status === "verified" || selectedTx.status === "Selesai" ? "text-emerald-800" : "text-red-800"}`}>
+                      {selectedTx.status === "verified" || selectedTx.status === "Selesai" ? "✓ Terverifikasi" : "✕ Ditolak"}
                     </p>
-                    <span className="text-xs text-stone-500">{selectedTx.processedBy}</span>
                   </div>
-                  {selectedTx.status === "verified" && (
+                  {(selectedTx.status === "verified" || selectedTx.status === "Selesai") && (
                     <div className="mt-2">
-                      <p className="text-sm text-emerald-700">Berat aktual: <span className="font-bold">{selectedTx.actualWeight} kg</span></p>
-                      <p className="text-lg font-bold text-emerald-800 mt-1">Rp {selectedTx.totalReward.toLocaleString("id-ID")}</p>
+                      <p className="text-sm text-emerald-700">Berat aktual: <span className="font-bold">{selectedTx.actual_weight || selectedTx.weight} kg</span></p>
+                      <p className="text-lg font-bold text-emerald-800 mt-1">Rp {Number(selectedTx.total_reward || selectedTx.reward).toLocaleString("id-ID")}</p>
                     </div>
                   )}
-                  {selectedTx.rejectionReason && (
-                    <p className="mt-2 text-sm text-red-700">Alasan: {selectedTx.rejectionReason}</p>
+                  {selectedTx.rejection_reason && (
+                    <p className="mt-2 text-sm text-red-700">Alasan: {selectedTx.rejection_reason}</p>
                   )}
                 </div>
               )}
@@ -252,6 +302,7 @@ export default function TransaksiPage() {
                         onChange={(e) => setActualWeight(e.target.value)}
                         className="w-full rounded-xl border border-stone-200 px-3 py-2.5 pr-12 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                         placeholder="0.0"
+                        disabled={isProcessing}
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-stone-400">kg</span>
                     </div>
@@ -268,14 +319,15 @@ export default function TransaksiPage() {
                   <div className="flex gap-3">
                     <button
                       onClick={handleVerify}
-                      disabled={!actualWeight || Number(actualWeight) <= 0}
+                      disabled={!actualWeight || Number(actualWeight) <= 0 || isProcessing}
                       className="flex-1 rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 transition"
                     >
-                      ✓ Selesai & Tambah Saldo
+                      {isProcessing ? "Memproses..." : "✓ Selesai & Tambah Saldo"}
                     </button>
                     <button
                       onClick={() => setMode("reject")}
-                      className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 hover:bg-red-100 transition"
+                      disabled={isProcessing}
+                      className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 hover:bg-red-100 transition disabled:opacity-50"
                     >
                       Tolak
                     </button>
@@ -294,19 +346,21 @@ export default function TransaksiPage() {
                       onChange={(e) => setRejectReason(e.target.value)}
                       className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
                       placeholder="Jelaskan alasan penolakan..."
+                      disabled={isProcessing}
                     />
                   </div>
                   <div className="flex gap-3">
                     <button
                       onClick={handleReject}
-                      disabled={!rejectReason}
+                      disabled={!rejectReason || isProcessing}
                       className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition"
                     >
-                      Konfirmasi Tolak
+                      {isProcessing ? "Memproses..." : "Konfirmasi Tolak"}
                     </button>
                     <button
                       onClick={() => setMode("verify")}
-                      className="rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50 transition"
+                      disabled={isProcessing}
+                      className="rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-50 transition disabled:opacity-50"
                     >
                       Kembali
                     </button>

@@ -1,0 +1,40 @@
+Mengingat Anda dan tim akan segera membagi porsi kerja, penyelarasan data antara sisi Nasabah (User) dan sisi Admin adalah kunci utamanya.
+
+Saat ini, sistem yang telah kita bangun di sisi User sangat canggih (memiliki XP gamifikasi, level tier, notifikasi real-time, QR Code, dan kalkulasi dinamis). Agar semua ini berfungsi dengan baik, Tim Admin Dashboard harus membangun "Penangkap" (Handler) dari aksi-aksi tersebut.
+
+Berikut adalah daftar fitur yang wajib terhubung ke Admin Dashboard beserta langkah pengerjaannya untuk tim Anda:
+
+1. Sistem Verifikasi Penarikan (Withdrawals)
+Saat nasabah menekan tombol "Tarik Saldo", saldo mereka di frontend sebetulnya dikunci (status: Menunggu Verifikasi).
+
+Apa yang harus Admin buat: Halaman tabel antrean (Queue List) khusus penarikan dana.
+Apa yang harus dilakukan:
+Sistem untuk menampilkan nama, nominal, dan detail bank/E-Wallet (OVO/Gopay) milik user.
+Action Button: Terima (Approve) dan Tolak (Reject).
+Jika "Terima", Admin mentransfer uang secara manual di dunia nyata, lalu klik Approve di sistem agar status user berubah menjadi Dikirim/Selesai.
+Jika "Tolak", status berubah menjadi Ditolak dan saldo (available balance) di sistem user akan kembali utuh.
+2. Scanner QR & Input Aktual Sampah
+Nasabah "Setor Langsung" sudah dibekali QR Code unik yang menyimpan ID Autentikasi mereka (contoh hasil scan: wastebank://scan/user_123xyz).
+
+Apa yang harus Admin buat: Fitur Pemindai Kamera (Camera Scanner) atau form Input ID Nasabah manual.
+Apa yang harus dilakukan:
+Setelah Admin men-scan QR dari HP nasabah yang datang, akan terbuka form "Input Berat Aktual".
+Nasabah sering asal menebak berat sampah mereka di rumah. Admin-lah yang menimbang secara nyata dengan timbangan digital agen, lalu mengisikan Jenis Sampah dan Berat (kg) yang sah ke sistem ini.
+3. Mesin Penghitung Level Harga Dinamis (Bonus Tier)
+Di sisi Nasabah, kita punya logika: Nasabah Silver dapat harga kotor +3%, Gold +5%.
+
+Apa yang harus Admin buat: Logika sinkronisasi harga perkalian yang sama di skema API Back-end / Admin.
+Apa yang harus dilakukan:
+Ketika Admin menginput "Kardus 10kg" pada formulir di Poin 2, backend Admin harus menoleh ke Database pengguna tersebut, mencek akumulasi transaksi mereka "Oh dia ini Gold VIP".
+Otomatis, sistem Admin akan mendesak persentase tambahan (+5% harga) ke struk final sebelum mengkreditkannya ke Saldo User tersebut.
+4. Pelatuk (Trigger) Notifikasi Real-Time & Email
+Logika email via Resend dan Popover Lonceng sudah rapi di sisi Front-end Nasabah. Namun saat ini, ia terpicu (triggered) secara mandiri seolah-olah setoran langsung berhasil.
+
+Apa yang harus Admin buat: Integrasi API Trigger Notifikasi.
+Apa yang harus dilakukan:
+Memindahkan perintah/pemanggilan fungsi sendBalanceNotificationEmail() dari browser nasabah menjadi tereksekusi di sisi server/admin.
+Artinya, hanya setelah Admin menekan "Approve Setoran" atau "Setujui Tarik Tunai", barulah Notifikasi In-App lonceng dan Email Mutasi terbang ke HP sang nasabah secara real-time.
+💡 Hal Paling Kritis (Langkah Prasyarat):
+Beri tahu rekan tim Anda bahwa sebelum kelima hal di atas bisa berjalan, Anda WAJIB mengganti Zustand localStorage (yang saat ini saya pakai untuk menopang frontend) menjadi Database Terpusat (Misal: Supabase, Vercel Postgres, atau MySQL).
+
+Tanpa database cloud, komputer Admin secara fisik tidak akan pernah bisa melihat transaksi apapun yang disubmit dari HP Nasabah, karena selama ini datanya "tersimpan murni di perangkat masing-masing".

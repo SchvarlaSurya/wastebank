@@ -1,32 +1,51 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAdminStore } from "@/store/useAdminStore";
+import { useState, useMemo, useEffect } from "react";
+import { getActivityLog } from "@/app/actions/adminVerification";
 import { actionLabel as actionLabelMap, type ActivityAction } from "@/lib/types";
 
 export default function LogPage() {
-  const { activityLog } = useAdminStore();
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [filterAction, setFilterAction] = useState<"all" | ActivityAction>("all");
 
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await getActivityLog(100);
+      if (res.success && res.logs) {
+        setLogs(res.logs);
+      }
+    } catch (error) {
+      console.error("Error loading activity logs:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
   const uniqueActions = useMemo(() => {
-    const set = new Set(activityLog.map((l) => l.action));
+    const set = new Set(logs.map((l) => l.action));
     return Array.from(set);
-  }, [activityLog]);
+  }, [logs]);
 
   const filtered = useMemo(() => {
-    return activityLog.filter((log) => {
+    return logs.filter((log) => {
       const matchSearch =
         log.adminName.toLowerCase().includes(search.toLowerCase()) ||
-        log.target.toLowerCase().includes(search.toLowerCase()) ||
-        log.detail.toLowerCase().includes(search.toLowerCase());
+        (log.targetId || "").toLowerCase().includes(search.toLowerCase()) ||
+        (log.details || "").toLowerCase().includes(search.toLowerCase());
       const matchAction = filterAction === "all" || log.action === filterAction;
       return matchSearch && matchAction;
     });
-  }, [activityLog, search, filterAction]);
+  }, [logs, search, filterAction]);
 
-  const formatTimestamp = (ts: string) => {
+  const formatTimestamp = (ts: any) => {
     try {
       const d = new Date(ts);
       return d.toLocaleString("id-ID", {
@@ -41,7 +60,7 @@ export default function LogPage() {
     }
   };
 
-  const actionColor = (action: ActivityAction) => {
+  const actionColor = (action: string) => {
     const colors: Record<string, string> = {
       verify_transaction: "bg-emerald-100 text-emerald-800",
       reject_transaction: "bg-red-100 text-red-800",
@@ -56,7 +75,7 @@ export default function LogPage() {
     return colors[action] || "bg-stone-100 text-stone-800";
   };
 
-  const actionIcon = (action: ActivityAction) => {
+  const actionIcon = (action: string) => {
     switch (action) {
       case "verify_transaction":
         return "✓";
@@ -80,6 +99,14 @@ export default function LogPage() {
         return "•";
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl flex h-[50vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-12">
@@ -122,9 +149,9 @@ export default function LogPage() {
           className="rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
         >
           <option value="all">Semua Aksi</option>
-          {uniqueActions.map((action) => (
+          {uniqueActions.map((action: any) => (
             <option key={action} value={action}>
-              {actionLabelMap[action]}
+              {actionLabelMap[action as ActivityAction] || action}
             </option>
           ))}
         </select>
@@ -149,18 +176,18 @@ export default function LogPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${actionColor(log.action)}`}>
-                      {log.actionLabel}
+                      {actionLabelMap[log.action as ActivityAction] || log.action}
                     </span>
                     <span className="text-xs text-stone-400">oleh</span>
                     <span className="text-xs font-semibold text-stone-700">{log.adminName}</span>
                   </div>
-                  <p className="mt-1 text-sm font-medium text-stone-800 truncate">{log.target}</p>
-                  <p className="mt-0.5 text-xs text-stone-500 truncate">{log.detail}</p>
+                  <p className="mt-1 text-sm font-medium text-stone-800 truncate">{log.targetType}: {log.targetId}</p>
+                  <p className="mt-0.5 text-xs text-stone-500 truncate">{log.details}</p>
                 </div>
               </div>
               <div className="flex-shrink-0 text-right sm:text-right">
-                <p className="text-xs text-stone-400">{formatTimestamp(log.timestamp)}</p>
-                <p className="text-[10px] text-stone-300 font-mono mt-0.5">{log.id}</p>
+                <p className="text-xs text-stone-400">{formatTimestamp(log.createdAt)}</p>
+                <p className="text-[10px] text-stone-300 font-mono mt-0.5">ID: {log.id}</p>
               </div>
             </div>
           </div>

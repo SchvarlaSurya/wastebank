@@ -1,14 +1,33 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAdminStore } from "@/store/useAdminStore";
+import { useState, useMemo, useEffect } from "react";
+import { getAllTransactionsAdmin } from "@/app/actions/adminDashboard";
 
 export default function LaporanPage() {
-  const { transactions, wasteCatalog } = useAdminStore();
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [dateRange, setDateRange] = useState<"today" | "week" | "month" | "custom">("month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const res = await getAllTransactionsAdmin();
+      if (res.success && res.data) {
+        setTransactions(res.data);
+      }
+    } catch (error) {
+      console.error("Error loading transactions for report:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   // Date range calculation
   const dateFilter = useMemo(() => {
@@ -36,26 +55,28 @@ export default function LaporanPage() {
   // Filtered verified transactions
   const filteredTx = useMemo(() => {
     return transactions.filter(
-      (tx) =>
-        tx.status === "verified" &&
-        tx.date >= dateFilter.from &&
-        tx.date <= dateFilter.to
+      (tx) => {
+        const txDate = new Date(tx.created_at).toISOString().split("T")[0];
+        return (tx.status === "verified" || tx.status === "Selesai") &&
+        txDate >= dateFilter.from &&
+        txDate <= dateFilter.to;
+      }
     );
   }, [transactions, dateFilter]);
 
   // Summary stats
   const totalTransaksi = filteredTx.length;
-  const totalBerat = filteredTx.reduce((sum, tx) => sum + (tx.actualWeight || 0), 0);
-  const totalNilai = filteredTx.reduce((sum, tx) => sum + tx.totalReward, 0);
+  const totalBerat = filteredTx.reduce((sum, tx) => sum + Number(tx.actual_weight || 0), 0);
+  const totalNilai = filteredTx.reduce((sum, tx) => sum + Number(tx.total_reward || 0), 0);
 
   // Category breakdown
   const categoryBreakdown = useMemo(() => {
     const map: Record<string, { count: number; weight: number; value: number }> = {};
     filteredTx.forEach((tx) => {
-      if (!map[tx.wasteType]) map[tx.wasteType] = { count: 0, weight: 0, value: 0 };
-      map[tx.wasteType].count++;
-      map[tx.wasteType].weight += tx.actualWeight || 0;
-      map[tx.wasteType].value += tx.totalReward;
+      if (!map[tx.waste_type]) map[tx.waste_type] = { count: 0, weight: 0, value: 0 };
+      map[tx.waste_type].count++;
+      map[tx.waste_type].weight += Number(tx.actual_weight || 0);
+      map[tx.waste_type].value += Number(tx.total_reward || 0);
     });
     return Object.entries(map)
       .map(([name, data]) => ({ name, ...data }))
@@ -64,10 +85,10 @@ export default function LaporanPage() {
 
   // Export CSV
   const exportCSV = () => {
-    const headers = ["ID,Nasabah,Jenis Sampah,Berat (kg),Harga/kg,Total (Rp),Tanggal,Diproses Oleh"];
+    const headers = ["ID,Nasabah,Jenis Sampah,Berat (kg),Harga/kg,Total (Rp),Tanggal"];
     const rows = filteredTx.map(
       (tx) =>
-        `${tx.id},${tx.nasabahName},${tx.wasteType},${tx.actualWeight},${tx.pricePerKg},${tx.totalReward},${tx.date},${tx.processedBy}`
+        `${tx.tx_id},${tx.user_id},${tx.waste_type},${tx.actual_weight},${tx.price_per_kg},${tx.total_reward},${new Date(tx.created_at).toLocaleDateString()}`
     );
     const csv = [headers, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -90,6 +111,14 @@ export default function LaporanPage() {
     { key: "month" as const, label: "30 Hari" },
     { key: "custom" as const, label: "Custom" },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl flex h-[50vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-12">
@@ -173,7 +202,7 @@ export default function LaporanPage() {
         </article>
         <article className="rounded-2xl border border-stone-200 bg-white p-5 shadow-sm print:shadow-none">
           <p className="text-sm font-medium text-stone-500">Total Berat</p>
-          <p className="mt-2 text-3xl font-bold text-stone-900">{totalBerat} <span className="text-lg text-stone-400">kg</span></p>
+          <p className="mt-2 text-3xl font-bold text-stone-900">{totalBerat.toFixed(2)} <span className="text-lg text-stone-400">kg</span></p>
         </article>
         <article className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm print:shadow-none">
           <p className="text-sm font-medium text-emerald-800">Total Nilai Transaksi</p>
@@ -200,7 +229,7 @@ export default function LaporanPage() {
                   <tr key={cat.name}>
                     <td className="py-2.5 font-medium text-stone-800">{cat.name}</td>
                     <td className="py-2.5 text-right text-stone-600">{cat.count}x</td>
-                    <td className="py-2.5 text-right text-stone-600">{cat.weight} kg</td>
+                    <td className="py-2.5 text-right text-stone-600">{cat.weight.toFixed(2)} kg</td>
                     <td className="py-2.5 text-right font-semibold text-stone-800">Rp {cat.value.toLocaleString("id-ID")}</td>
                   </tr>
                 ))}
@@ -225,24 +254,22 @@ export default function LaporanPage() {
                 <th className="px-5 py-3 font-medium text-stone-600 text-right">Berat</th>
                 <th className="px-5 py-3 font-medium text-stone-600 text-right">Reward</th>
                 <th className="px-5 py-3 font-medium text-stone-600">Tanggal</th>
-                <th className="px-5 py-3 font-medium text-stone-600">Admin</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
               {filteredTx.map((tx) => (
                 <tr key={tx.id} className="hover:bg-stone-50/50 transition-colors">
-                  <td className="px-5 py-3 font-mono text-xs text-stone-500">{tx.id}</td>
-                  <td className="px-5 py-3 font-medium text-stone-800">{tx.nasabahName}</td>
-                  <td className="px-5 py-3 text-stone-600">{tx.wasteType}</td>
-                  <td className="px-5 py-3 text-right text-stone-600">{tx.actualWeight} kg</td>
-                  <td className="px-5 py-3 text-right font-semibold text-emerald-700">Rp {tx.totalReward.toLocaleString("id-ID")}</td>
-                  <td className="px-5 py-3 text-stone-500">{tx.date}</td>
-                  <td className="px-5 py-3 text-stone-500 text-xs">{tx.processedBy}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-stone-500">{tx.tx_id}</td>
+                  <td className="px-5 py-3 font-medium text-stone-800">{tx.user_id}</td>
+                  <td className="px-5 py-3 text-stone-600">{tx.waste_type}</td>
+                  <td className="px-5 py-3 text-right text-stone-600">{Number(tx.actual_weight || 0).toFixed(2)} kg</td>
+                  <td className="px-5 py-3 text-right font-semibold text-emerald-700">Rp {Number(tx.total_reward || 0).toLocaleString("id-ID")}</td>
+                  <td className="px-5 py-3 text-stone-500">{new Date(tx.created_at).toLocaleDateString("id-ID")}</td>
                 </tr>
               ))}
               {filteredTx.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-stone-400">Tidak ada data pada periode ini.</td>
+                  <td colSpan={6} className="px-5 py-8 text-center text-stone-400">Tidak ada data pada periode ini.</td>
                 </tr>
               )}
             </tbody>

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAdminStore } from "@/store/useAdminStore";
+import { useState, useMemo, useEffect } from "react";
 import { statusLabel, type Nasabah, type NasabahStatus } from "@/lib/types";
-
-const ADMIN_NAME = "Admin Schvarla";
+import { getAllUsers } from "@/app/actions/adminVerification";
+import { getAllTransactionsAdmin, updateUserStatus, editUserBalance } from "@/app/actions/adminDashboard";
 
 export default function NasabahPage() {
-  const { nasabahList, transactions, verifyNasabah, freezeNasabah, unfreezeNasabah, editBalance } = useAdminStore();
+  const [nasabahList, setNasabahList] = useState<Nasabah[]>([]);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | NasabahStatus>("all");
@@ -15,6 +17,45 @@ export default function NasabahPage() {
   const [editSaldo, setEditSaldo] = useState(false);
   const [newBalance, setNewBalance] = useState("");
   const [editReason, setEditReason] = useState("");
+
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [usersRes, txRes] = await Promise.all([
+        getAllUsers(),
+        getAllTransactionsAdmin()
+      ]);
+
+      if (usersRes.success && usersRes.users) {
+        const mapped: Nasabah[] = usersRes.users.map(u => ({
+          id: u.userId,
+          name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+          email: u.email,
+          phone: u.phoneNumber || "-",
+          address: u.address || "-",
+          ktp: "-", // KTP not in current schema
+          balance: u.availableBalance,
+          totalDeposits: u.totalDeposits,
+          totalWeight: u.kumulatifSampahKg,
+          status: (u as any).status || "verified",
+          joinedAt: "-", // JoinedAt not in current schema mapping
+        }));
+        setNasabahList(mapped);
+      }
+
+      if (txRes.success && txRes.data) {
+        setAllTransactions(txRes.data);
+      }
+    } catch (error) {
+      console.error("Error loading nasabah data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const filtered = useMemo(() => {
     return nasabahList.filter((n) => {
@@ -26,30 +67,42 @@ export default function NasabahPage() {
 
   const nasabahTx = useMemo(() => {
     if (!selectedNasabah) return [];
-    return transactions.filter((tx) => tx.nasabahId === selectedNasabah.id);
-  }, [selectedNasabah, transactions]);
+    return allTransactions.filter((tx) => tx.user_id === selectedNasabah.id);
+  }, [selectedNasabah, allTransactions]);
 
-  // Refresh selected nasabah from store when it changes
+  // Refresh selected nasabah from list when it changes
   const currentSelected = selectedNasabah ? nasabahList.find((n) => n.id === selectedNasabah.id) || null : null;
 
-  const handleVerify = (id: string) => {
-    verifyNasabah(id, ADMIN_NAME);
+  const handleUpdateStatus = async (id: string, status: NasabahStatus) => {
+    setIsProcessing(true);
+    try {
+      const res = await updateUserStatus(id, status);
+      if (res.success) {
+        await loadData();
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleFreeze = (id: string) => {
-    freezeNasabah(id, ADMIN_NAME);
-  };
-
-  const handleUnfreeze = (id: string) => {
-    unfreezeNasabah(id, ADMIN_NAME);
-  };
-
-  const handleEditBalance = () => {
+  const handleEditBalance = async () => {
     if (!currentSelected || !newBalance || !editReason) return;
-    editBalance(currentSelected.id, Number(newBalance), editReason, ADMIN_NAME);
-    setEditSaldo(false);
-    setNewBalance("");
-    setEditReason("");
+    setIsProcessing(true);
+    try {
+      const res = await editUserBalance(currentSelected.id, Number(newBalance), editReason);
+      if (res.success) {
+        await loadData();
+        setEditSaldo(false);
+        setNewBalance("");
+        setEditReason("");
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const statusBadge = (status: NasabahStatus) => {
@@ -64,6 +117,14 @@ export default function NasabahPage() {
       </span>
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-7xl flex h-[50vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-12">
@@ -148,7 +209,8 @@ export default function NasabahPage() {
                       </button>
                       {n.status === "pending" && (
                         <button
-                          onClick={() => handleVerify(n.id)}
+                          onClick={() => handleUpdateStatus(n.id, "verified")}
+                          disabled={isProcessing}
                           className="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-200 transition"
                         >
                           Verifikasi
@@ -178,7 +240,7 @@ export default function NasabahPage() {
                 <h3 className="text-lg font-semibold text-stone-900">{currentSelected.name}</h3>
                 <p className="text-sm text-stone-500">{currentSelected.email} · {currentSelected.phone}</p>
               </div>
-              <button onClick={() => setSelectedNasabah(null)} className="rounded-full p-2 text-stone-400 hover:bg-stone-100 hover:text-stone-600">
+              <button onClick={() => setSelectedNasabah(null)} className="rounded-full p-2 text-stone-400 hover:bg-stone-100 hover:text-stone-600" disabled={isProcessing}>
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -191,14 +253,6 @@ export default function NasabahPage() {
                 <div className="rounded-xl bg-stone-50 p-4">
                   <p className="text-xs font-medium text-stone-500 uppercase tracking-wider">Alamat</p>
                   <p className="mt-1 text-sm text-stone-800">{currentSelected.address}</p>
-                </div>
-                <div className="rounded-xl bg-stone-50 p-4">
-                  <p className="text-xs font-medium text-stone-500 uppercase tracking-wider">KTP</p>
-                  <p className="mt-1 text-sm text-stone-800 font-mono">{currentSelected.ktp}</p>
-                </div>
-                <div className="rounded-xl bg-stone-50 p-4">
-                  <p className="text-xs font-medium text-stone-500 uppercase tracking-wider">Bergabung</p>
-                  <p className="mt-1 text-sm text-stone-800">{currentSelected.joinedAt}</p>
                 </div>
                 <div className="rounded-xl bg-stone-50 p-4">
                   <p className="text-xs font-medium text-stone-500 uppercase tracking-wider">Status</p>
@@ -215,6 +269,7 @@ export default function NasabahPage() {
                   </div>
                   <button
                     onClick={() => { setEditSaldo(!editSaldo); setNewBalance(String(currentSelected.balance)); }}
+                    disabled={isProcessing}
                     className="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 transition"
                   >
                     {editSaldo ? "Batal" : "Edit Saldo"}
@@ -229,6 +284,7 @@ export default function NasabahPage() {
                         value={newBalance}
                         onChange={(e) => setNewBalance(e.target.value)}
                         className="mt-1 w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
+                        disabled={isProcessing}
                       />
                     </div>
                     <div>
@@ -239,14 +295,15 @@ export default function NasabahPage() {
                         onChange={(e) => setEditReason(e.target.value)}
                         placeholder="Contoh: Koreksi input duplikat"
                         className="mt-1 w-full rounded-lg border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
+                        disabled={isProcessing}
                       />
                     </div>
                     <button
                       onClick={handleEditBalance}
-                      disabled={!newBalance || !editReason}
+                      disabled={!newBalance || !editReason || isProcessing}
                       className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-50 transition"
                     >
-                      Simpan Perubahan
+                      {isProcessing ? "Menyimpan..." : "Simpan Perubahan"}
                     </button>
                   </div>
                 )}
@@ -256,7 +313,8 @@ export default function NasabahPage() {
               <div className="flex gap-2">
                 {currentSelected.status === "pending" && (
                   <button
-                    onClick={() => handleVerify(currentSelected.id)}
+                    onClick={() => handleUpdateStatus(currentSelected.id, "verified")}
+                    disabled={isProcessing}
                     className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition"
                   >
                     ✓ Verifikasi Akun
@@ -264,7 +322,8 @@ export default function NasabahPage() {
                 )}
                 {currentSelected.status === "verified" && (
                   <button
-                    onClick={() => handleFreeze(currentSelected.id)}
+                    onClick={() => handleUpdateStatus(currentSelected.id, "frozen")}
+                    disabled={isProcessing}
                     className="rounded-lg bg-red-100 px-4 py-2 text-xs font-semibold text-red-800 hover:bg-red-200 transition"
                   >
                     ✕ Bekukan Akun
@@ -272,7 +331,8 @@ export default function NasabahPage() {
                 )}
                 {currentSelected.status === "frozen" && (
                   <button
-                    onClick={() => handleUnfreeze(currentSelected.id)}
+                    onClick={() => handleUpdateStatus(currentSelected.id, "verified")}
+                    disabled={isProcessing}
                     className="rounded-lg bg-blue-100 px-4 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-200 transition"
                   >
                     ↻ Aktifkan Kembali
@@ -288,16 +348,16 @@ export default function NasabahPage() {
                     {nasabahTx.map((tx) => (
                       <div key={tx.id} className="flex items-center justify-between rounded-lg bg-stone-50 px-4 py-2.5">
                         <div>
-                          <p className="text-sm font-medium text-stone-800">{tx.wasteType}</p>
-                          <p className="text-xs text-stone-500">{tx.date} · {tx.actualWeight || tx.estimatedWeight}kg · {tx.id}</p>
+                          <p className="text-sm font-medium text-stone-800">{tx.waste_type}</p>
+                          <p className="text-xs text-stone-500">{new Date(tx.created_at).toLocaleDateString("id-ID")} · {tx.actual_weight || tx.estimated_weight}kg · {tx.tx_id}</p>
                         </div>
                         <div className="text-right">
-                          {tx.status === "verified" && (
-                            <p className="text-sm font-semibold text-emerald-700">+ Rp {tx.totalReward.toLocaleString("id-ID")}</p>
+                          {(tx.status === "verified" || tx.status === "Selesai") && (
+                            <p className="text-sm font-semibold text-emerald-700">+ Rp {(tx.total_reward || 0).toLocaleString("id-ID")}</p>
                           )}
                           <span className={`text-[10px] font-bold uppercase ${
                             tx.status === "pending" ? "text-amber-600" :
-                            tx.status === "verified" ? "text-emerald-600" : "text-red-600"
+                            (tx.status === "verified" || tx.status === "Selesai") ? "text-emerald-600" : "text-red-600"
                           }`}>
                             {tx.status}
                           </span>

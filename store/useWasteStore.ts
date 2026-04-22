@@ -54,20 +54,20 @@ export const useWasteStore = create<WasteStore>()((set, get) => ({
         const newTx: Transaction = {
           ...transaction,
           id,
-          status: 'Selesai', // Mock instant verification
+          status: 'pending', // Awaiting admin verification
         };
         
         const newNotification: AppNotification = {
           id: `NOTIF-${Date.now()}`,
-          title: "Setoran Berhasil!",
-          message: `Saldo bertambah Rp ${transaction.reward.toLocaleString('id-ID')} dari ${transaction.weight}kg ${transaction.type}.`,
+          title: "Setoran Diajukan",
+          message: `Setoran ${transaction.weight}kg ${transaction.type} telah diajukan. Menunggu verifikasi admin untuk penambahan saldo.`,
           date: new Date().toISOString(),
           read: false,
         };
         
         set((state) => ({
           transactions: [newTx, ...state.transactions],
-          balance: state.balance + transaction.reward,
+          // Balance is NOT updated here; it's re-fetched from DB after verification
           notifications: [newNotification, ...state.notifications],
         }));
       },

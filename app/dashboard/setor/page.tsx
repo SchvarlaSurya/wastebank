@@ -1,32 +1,37 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useWasteStore, useUserTier } from "@/store/useWasteStore";
 import { QRCodeCanvas } from "qrcode.react";
 import { useUser } from "@clerk/nextjs";
 import { toast } from "sonner";
 import { sendBalanceNotificationEmail } from "@/app/actions/notification";
-import { submitDeposit } from "@/app/actions/transaction";
-
-const baseWasteCatalog = [
-  { id: "plastic", name: "Plastik Campur", category: "anorganik", pricePerKg: 4200 },
-  { id: "paper", name: "Kertas dan Kardus", category: "anorganik", pricePerKg: 2800 },
-  { id: "metal", name: "Logam Ringan", category: "anorganik", pricePerKg: 7600 },
-  { id: "organic", name: "Sisa Organik Kering", category: "organik", pricePerKg: 1700 },
-  { id: "battery", name: "Baterai Rumah Tangga", category: "khusus", pricePerKg: 9800 },
-  { id: "electronics", name: "Elektronik Kecil", category: "khusus", pricePerKg: 13200 },
-];
+import { submitDeposit, getWasteCatalog } from "@/app/actions/transaction";
 
 export default function SetorSampahPage() {
   const { user } = useUser();
   const { bonusPercentage, tier } = useUserTier();
 
+  const [dbCatalog, setDbCatalog] = useState<any[]>([]);
+  const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
+
+  useEffect(() => {
+    async function loadCatalog() {
+      const res = await getWasteCatalog();
+      if (res.success && res.data) {
+        setDbCatalog(res.data);
+      }
+      setIsLoadingCatalog(false);
+    }
+    loadCatalog();
+  }, []);
+
   const wasteCatalog = useMemo(() => {
-    return baseWasteCatalog.map(item => ({
+    return dbCatalog.map(item => ({
       ...item,
-      pricePerKg: item.pricePerKg + (item.pricePerKg * (bonusPercentage / 100))
+      pricePerKg: Number(item.pricePerKg) + (Number(item.pricePerKg) * (bonusPercentage / 100))
     }));
-  }, [bonusPercentage]);
+  }, [dbCatalog, bonusPercentage]);
 
   const [activeTab, setActiveTab] = useState<"pickup" | "dropoff">("pickup");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -60,7 +65,7 @@ export default function SetorSampahPage() {
       const res = await submitDeposit(Number(form.weight), form.wasteType, estimatedReward, form.date);
       
       if (res.success) {
-        // Optimistic UI update in Zustand without hitting DB again
+        // Optimistic UI update in Zustand (status now defaults to 'pending')
         addTransaction({
           type: form.wasteType,
           weight: Number(form.weight),
@@ -71,13 +76,11 @@ export default function SetorSampahPage() {
         setLastSubmittedWeight(Number(form.weight));
         setIsSuccess(true);
         
-        const newTotalBalance = currentBalance + estimatedReward;
-
         // Trigger modern UI Toast
-        toast.success(
+        toast.info(
           <div className="flex flex-col gap-1">
-            <span className="font-bold text-stone-900">Setoran Berhasil!</span>
-            <span className="text-emerald-700 font-medium">+ Rp ${estimatedReward.toLocaleString("id-ID")}</span>
+            <span className="font-bold text-stone-900">Setoran Diajukan</span>
+            <span className="text-stone-600 text-xs">Menunggu verifikasi admin untuk memproses saldo.</span>
           </div>, 
           { duration: 5000 }
         );
@@ -89,15 +92,15 @@ export default function SetorSampahPage() {
           name: user.fullName || user.username || "Eco Warrior",
           amount: estimatedReward,
           type: "deposit",
-          balance: newTotalBalance
+          balance: currentBalance // Use existing balance since it hasn't changed yet
         });
       }
 
       // reset form
       setForm({ wasteType: "", weight: "", address: "", date: "", notes: "" });
       
-      // hide success message after 5 seconds
-      setTimeout(() => setIsSuccess(false), 5000);
+      // hide success message after 10 seconds (give more time to read pending info)
+      setTimeout(() => setIsSuccess(false), 10000);
       } else {
         toast.error("Gagal menyimpan ke server database.");
       }
@@ -182,11 +185,11 @@ export default function SetorSampahPage() {
           <div className="rounded-2xl bg-emerald-50 p-6 text-center">
             <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </span>
-            <p className="text-lg font-semibold text-emerald-800">Permintaan Pickup Berhasil</p>
-            <p className="mt-2 text-sm text-emerald-700">Tim operasional akan menghubungi Anda melalui WhatsApp untuk konfirmasi penjemputan.</p>
+            <p className="text-lg font-semibold text-emerald-800">Setoran Berhasil Diajukan</p>
+            <p className="mt-2 text-sm text-emerald-700">Status saat ini: <strong>Menunggu Verifikasi Admin</strong>. Saldo Anda akan bertambah setelah petugas memverifikasi berat dan jenis sampah Anda.</p>
             
             <div className="mt-6 rounded-xl bg-white p-5 shadow-sm border border-emerald-100">
               <h3 className="font-semibold text-emerald-900 border-b border-emerald-100 pb-2 mb-3 text-sm uppercase tracking-wide">🌍 Dampak Positif Anda Hari Ini</h3>
