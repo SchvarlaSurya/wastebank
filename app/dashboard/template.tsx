@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 export default function Template({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // Animasi Variasi: Bergerak pelan dari bawah ke atas dengan blur memudar
   const pageVariants = {
     initial: {
       opacity: 0,
@@ -21,14 +20,13 @@ export default function Template({ children }: { children: React.ReactNode }) {
       scale: 1,
       transition: {
         duration: 0.5,
-        ease: [0.22, 1, 0.36, 1], // Custom kubik bezier yang elegan (mirip iOS)
+        ease: [0.22, 1, 0.36, 1], 
       }
     }
   };
 
   return (
-    // Unique key membuat Next.js "me-render ulang" div ini setiap pindah URL
-    // sehingga animasi masuk akan selalu berputar
+    
     <motion.div
       key={pathname}
       variants={pageVariants}

@@ -158,6 +158,33 @@ export default function StorytellingHome() {
 
   return (
     <main className="bg-stone-50 text-stone-900 overflow-x-hidden">
+      {/* Navigation Header */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-stone-900/90 to-transparent px-4 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
+              WB
+            </span>
+            <span className="font-semibold tracking-wide text-white">WasteBank</span>
+          </Link>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="rounded-full border border-white/30 px-5 py-2 text-sm font-medium text-white hover:bg-white/10 transition-colors"
+            >
+              Masuk
+            </Link>
+            <Link
+              href="/register"
+              className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 transition-colors"
+            >
+              Daftar
+            </Link>
+          </div>
+        </div>
+      </header>
+
       {/* Hero Section - The Problem */}
       <section className="relative min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-900 via-stone-800 to-stone-700 overflow-hidden">
         {/* Animated background elements */}

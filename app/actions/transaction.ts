@@ -120,6 +120,32 @@ export async function submitWithdrawal(method: string, accountName: string, acco
   }
 }
 
+export async function submitAIScanReward(trashType: string) {
+  const user = await currentUser();
+  if (!user) {
+    throw new Error("Unauthorized");
+  }
+
+  const txId = `AI-${Math.floor(10000 + Math.random() * 90000)}`;
+  const date = new Date();
+  
+  try {
+    // 50 Eco-Token (Rp 50 value or dummy value for scanning)
+    // We set status to 'verified' so it immediately reflects in the dashboard balance.
+    await sql`
+      INSERT INTO transactions (user_id, tx_id, type, weight, reward, date, status, price_per_kg)
+      VALUES (${user.id}, ${txId}, ${'Scan AI: ' + trashType}, 0, 50, ${date}, 'verified', 0)
+    `;
+
+    revalidatePath("/dashboard");
+    revalidatePath("/admin/transaksi");
+    return { success: true, txId };
+  } catch (error) {
+    console.error("Error submitting AI reward:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function getGlobalWasteStats() {
   try {
     // 1. Distribusi Jenis Sampah (All users) - MONTHLY - Only Verified

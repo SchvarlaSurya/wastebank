@@ -16,6 +16,7 @@ import {
   Cell,
   Legend
 } from "recharts";
+import TrashScanner from "@/components/TrashScanner";
 
 const COLORS = ["#047857", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#065f46"];
 
@@ -153,6 +154,11 @@ export default function DashboardPage() {
           <p className="text-sm font-medium text-stone-500">Total Poin / Saldo Ditukar</p>
           <p className="mt-2 text-3xl font-bold text-stone-900">Rp {totalDitarik.toLocaleString("id-ID")}</p>
         </article>
+      </section>
+
+      {/* AI Scanner Section */}
+      <section className="my-6">
+        <TrashScanner />
       </section>
 
       {/* Charts Section */}
