@@ -30,9 +30,9 @@ export async function getUserDashboardData() {
     `;
 
     // Calculate total balance from DB source of truth
-    // ONLY include verified or finished transactions for balance
+    // ONLY include verified transactions for balance
     const totalEarnings = transactions
-      .filter(tx => tx.status === 'verified' || tx.status === 'Selesai')
+      .filter(tx => tx.status === 'verified')
       .reduce((sum, tx) => sum + Number(tx.reward), 0);
 
     const totalWithdrawnAndPending = withdrawals

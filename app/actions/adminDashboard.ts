@@ -113,6 +113,10 @@ export async function getAllTransactionsAdmin(): Promise<{ success: boolean; dat
         weight as estimated_weight, 
         reward as total_reward, 
         status, 
+        notes,
+        rejection_reason,
+        actual_weight,
+        price_per_kg,
         date as created_at 
       FROM transactions 
       ORDER BY date DESC

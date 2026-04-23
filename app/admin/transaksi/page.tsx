@@ -105,7 +105,6 @@ export default function TransaksiPage() {
       pending: "bg-amber-100 text-amber-800",
       verified: "bg-emerald-100 text-emerald-800",
       rejected: "bg-red-100 text-red-800",
-      Selesai: "bg-emerald-100 text-emerald-800",
     };
     return (
       <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${styles[rawStatus] || "bg-stone-100 text-stone-800"}`}>
@@ -117,7 +116,7 @@ export default function TransaksiPage() {
   const tabs = [
     { key: "all" as const, label: "Semua", count: transactions.length },
     { key: "pending" as const, label: "Pending", count: pendingCount },
-    { key: "verified" as const, label: "Terverifikasi", count: transactions.filter((t) => t.status === "verified" || t.status === "Selesai").length },
+    { key: "verified" as const, label: "Terverifikasi", count: transactions.filter((t) => t.status === "verified").length },
     { key: "rejected" as const, label: "Ditolak", count: transactions.filter((t) => t.status === "rejected").length },
   ];
 
@@ -262,9 +261,14 @@ export default function TransaksiPage() {
               </div>
 
               {selectedTx.notes && (
-                <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
-                  <p className="text-xs font-medium text-blue-700">Catatan nasabah:</p>
-                  <p className="mt-0.5 text-sm text-blue-800">{selectedTx.notes}</p>
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg className="h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
+                    <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Pesan Nasabah</p>
+                  </div>
+                  <p className="text-sm text-amber-900 italic">"{selectedTx.notes}"</p>
                 </div>
               )}
 

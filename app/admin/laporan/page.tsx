@@ -88,7 +88,7 @@ export default function LaporanPage() {
     const headers = ["ID,Nasabah,Jenis Sampah,Berat (kg),Harga/kg,Total (Rp),Tanggal"];
     const rows = filteredTx.map(
       (tx) =>
-        `${tx.tx_id},${tx.user_id},${tx.waste_type},${tx.actual_weight},${tx.price_per_kg},${tx.total_reward},${new Date(tx.created_at).toLocaleDateString()}`
+        `${tx.tx_id || ""},${tx.user_id || ""},${tx.waste_type || ""},${tx.actual_weight || 0},${tx.price_per_kg || 0},${tx.total_reward || 0},${new Date(tx.created_at).toLocaleDateString()}`
     );
     const csv = [headers, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
